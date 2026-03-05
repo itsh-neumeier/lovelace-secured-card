@@ -1,0 +1,20 @@
+{
+  "name": "lovelace-secured-card",
+  "version": "1.0.0",
+  "description": "A PIN-protected custom Lovelace card for Home Assistant",
+  "type": "module",
+  "scripts": {
+    "build": "rollup -c",
+    "dev": "rollup -c -w"
+  },
+  "devDependencies": {
+    "lit": "^3.1.0",
+    "rollup": "^4.9.0",
+    "@rollup/plugin-node-resolve": "^15.2.0",
+    "@rollup/plugin-typescript": "^11.1.0",
+    "@rollup/plugin-terser": "^0.4.0",
+    "typescript": "^5.3.0",
+    "tslib": "^2.6.0"
+  },
+  "license": "MIT"
+}
