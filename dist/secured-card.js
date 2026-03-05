@@ -1,16 +1,14 @@
 /**
  * Secured Card - PIN-protected custom Lovelace card for Home Assistant
- * Version: 1.0.0
+ * Version: 1.1.0
  * License: MIT
- * https://github.com/timoneumeier/lovelace-secured-card
+ * https://github.com/itsh-neumeier/lovelace-secured-card
  */
 
-const CARD_VERSION = "1.0.0";
+const CARD_VERSION = "1.1.0";
 const DEFAULT_TIMEOUT = 30;
 const MIN_PIN_LENGTH = 4;
 const MAX_PIN_LENGTH = 10;
-const MAX_FAILED_ATTEMPTS = 5;
-const LOCKOUT_BASE_MS = 2000;
 
 const DOMAIN_ICONS = {
   switch: "mdi:toggle-switch",
@@ -71,6 +69,17 @@ function createElement(tag, opts) {
     if (opts.textContent !== undefined) el.textContent = opts.textContent;
   }
   return el;
+}
+
+/** Get entity IDs from config (supports both `entity` and `entities`) */
+function getEntityIds(config) {
+  if (config.entities && Array.isArray(config.entities)) {
+    return config.entities;
+  }
+  if (config.entity) {
+    return [config.entity];
+  }
+  return [];
 }
 
 // ─── PIN Dialog CSS ──────────────────────────────────────────────────────────
@@ -246,11 +255,8 @@ class PinDialog extends HTMLElement {
       expectedPin: "",
       pin: "",
       error: "",
-      failedAttempts: 0,
-      lockedUntil: 0,
     });
 
-    // Parse CSS once in constructor
     const style = document.createElement("style");
     style.textContent = PIN_DIALOG_CSS;
     shadow.appendChild(style);
@@ -268,21 +274,17 @@ class PinDialog extends HTMLElement {
     const p = _priv.get(this);
     const shadow = p.shadow;
 
-    // Remove everything except the <style> element
     while (shadow.childNodes.length > 1) {
       shadow.removeChild(shadow.lastChild);
     }
 
-    // Overlay
     const overlay = createElement("div", { className: "overlay" });
     overlay.addEventListener("click", (e) => {
       if (e.target === overlay) this._cancel();
     });
 
-    // Dialog container
     const dialog = createElement("div", { className: "dialog" });
 
-    // Title
     const title = createElement("div", { className: "dialog-title" });
     const lockIcon = document.createElement("ha-icon");
     lockIcon.setAttribute("icon", "mdi:lock");
@@ -290,7 +292,6 @@ class PinDialog extends HTMLElement {
     title.appendChild(document.createTextNode("PIN eingeben"));
     dialog.appendChild(title);
 
-    // PIN dots display
     const pinDisplay = createElement("div", {
       className: "pin-display",
       id: "pin-display",
@@ -298,7 +299,6 @@ class PinDialog extends HTMLElement {
     this._updateDots(pinDisplay);
     dialog.appendChild(pinDisplay);
 
-    // Error message
     const errorDiv = createElement("div", {
       className: "pin-error",
       id: "pin-error",
@@ -306,11 +306,8 @@ class PinDialog extends HTMLElement {
     });
     dialog.appendChild(errorDiv);
 
-    // Keypad
     const keypad = createElement("div", { className: "keypad" });
-    const keys = [1, 2, 3, 4, 5, 6, 7, 8, 9, "back", 0, "submit"];
-
-    keys.forEach((key) => {
+    [1, 2, 3, 4, 5, 6, 7, 8, 9, "back", 0, "submit"].forEach((key) => {
       const btn = document.createElement("button");
       btn.classList.add("key");
 
@@ -319,10 +316,7 @@ class PinDialog extends HTMLElement {
         const icon = document.createElement("ha-icon");
         icon.setAttribute("icon", "mdi:backspace-outline");
         btn.appendChild(icon);
-        btn.addEventListener("click", (e) => {
-          e.stopPropagation();
-          this._removeDigit();
-        });
+        btn.addEventListener("click", (e) => { e.stopPropagation(); this._removeDigit(); });
       } else if (key === "submit") {
         btn.classList.add("submit");
         btn.disabled = p.pin.length === 0;
@@ -330,28 +324,18 @@ class PinDialog extends HTMLElement {
         const icon = document.createElement("ha-icon");
         icon.setAttribute("icon", "mdi:check");
         btn.appendChild(icon);
-        btn.addEventListener("click", (e) => {
-          e.stopPropagation();
-          this._submit();
-        });
+        btn.addEventListener("click", (e) => { e.stopPropagation(); this._submit(); });
       } else {
         btn.textContent = String(key);
-        btn.addEventListener("click", (e) => {
-          e.stopPropagation();
-          this._addDigit(String(key));
-        });
+        btn.addEventListener("click", (e) => { e.stopPropagation(); this._addDigit(String(key)); });
       }
 
       keypad.appendChild(btn);
     });
     dialog.appendChild(keypad);
 
-    // Cancel button
     const actions = createElement("div", { className: "dialog-actions" });
-    const cancelBtn = createElement("button", {
-      className: "cancel-btn",
-      textContent: "Abbrechen",
-    });
+    const cancelBtn = createElement("button", { className: "cancel-btn", textContent: "Abbrechen" });
     cancelBtn.addEventListener("click", () => this._cancel());
     actions.appendChild(cancelBtn);
     dialog.appendChild(actions);
@@ -368,15 +352,9 @@ class PinDialog extends HTMLElement {
     const dotCount = Math.max(p.pin.length, MIN_PIN_LENGTH);
     const existing = container.children;
 
-    // Add/remove dots to match count
-    while (existing.length > dotCount) {
-      container.removeChild(container.lastChild);
-    }
-    while (existing.length < dotCount) {
-      container.appendChild(createElement("div", { className: "pin-dot" }));
-    }
+    while (existing.length > dotCount) container.removeChild(container.lastChild);
+    while (existing.length < dotCount) container.appendChild(createElement("div", { className: "pin-dot" }));
 
-    // Update filled state
     for (let i = 0; i < dotCount; i++) {
       existing[i].classList.toggle("filled", i < p.pin.length);
     }
@@ -391,7 +369,7 @@ class PinDialog extends HTMLElement {
     const errorEl = p.shadow.getElementById("pin-error");
     if (errorEl) errorEl.textContent = "";
     const submitBtn = p.shadow.getElementById("submit-btn");
-    if (submitBtn) submitBtn.disabled = p.pin.length === 0;
+    if (submitBtn) submitBtn.disabled = false;
   }
 
   _removeDigit() {
@@ -408,32 +386,10 @@ class PinDialog extends HTMLElement {
   _submit() {
     const p = _priv.get(this);
 
-    // Brute-force protection: check lockout
-    const now = Date.now();
-    if (now < p.lockedUntil) {
-      const remaining = Math.ceil((p.lockedUntil - now) / 1000);
-      p.error = `Gesperrt f\u00fcr ${remaining}s`;
-      const errorEl = p.shadow.getElementById("pin-error");
-      if (errorEl) errorEl.textContent = p.error;
-      return;
-    }
-
-    // Constant-time comparison to prevent timing attacks
     if (constantTimeEqual(p.pin, p.expectedPin)) {
-      p.failedAttempts = 0;
       this.dispatchEvent(new CustomEvent("pin-valid", { bubbles: false, composed: false }));
     } else {
-      p.failedAttempts++;
-
-      // Exponential backoff: 2s, 4s, 8s, 16s, 32s
-      if (p.failedAttempts >= MAX_FAILED_ATTEMPTS) {
-        const delay = Math.min(LOCKOUT_BASE_MS * Math.pow(2, p.failedAttempts - MAX_FAILED_ATTEMPTS), 60000);
-        p.lockedUntil = now + delay;
-        p.error = `Zu viele Versuche. Gesperrt f\u00fcr ${Math.ceil(delay / 1000)}s`;
-      } else {
-        p.error = `Falscher PIN (${p.failedAttempts}/${MAX_FAILED_ATTEMPTS})`;
-      }
-
+      p.error = "Falscher PIN";
       p.pin = "";
       const errorEl = p.shadow.getElementById("pin-error");
       if (errorEl) errorEl.textContent = p.error;
@@ -462,17 +418,60 @@ const CARD_CSS = `
     overflow: hidden;
   }
 
-  .card-row {
+  .card-header {
     display: flex;
     align-items: center;
-    padding: 12px 16px;
-    gap: 12px;
-    cursor: pointer;
-    position: relative;
+    padding: 12px 16px 4px;
+    gap: 8px;
   }
 
-  .card-row:active {
+  .card-header-title {
+    flex: 1;
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--primary-text-color);
+  }
+
+  .header-lock {
+    --mdc-icon-size: 20px;
+    color: var(--error-color, #db4437);
+    transition: color 0.3s ease;
+    cursor: pointer;
+  }
+
+  .header-lock.unlocked {
+    color: var(--success-color, #43a047);
+  }
+
+  .timeout-bar {
+    height: 3px;
+    background: var(--success-color, #43a047);
+    transform-origin: left;
+    will-change: transform;
+    margin: 0 16px 4px;
+    border-radius: 2px;
+  }
+
+  .entity-row {
+    display: flex;
+    align-items: center;
+    padding: 10px 16px;
+    gap: 12px;
+    position: relative;
+    transition: background 0.1s ease;
+  }
+
+  .entity-row.clickable {
+    cursor: pointer;
+  }
+
+  .entity-row.clickable:active {
     background: var(--secondary-background-color);
+  }
+
+  .entity-row.locked {
+    opacity: 0.6;
+    cursor: default;
   }
 
   .entity-icon {
@@ -505,35 +504,6 @@ const CARD_CSS = `
     margin-top: 2px;
   }
 
-  .lock-indicator {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-shrink: 0;
-  }
-
-  .lock-icon {
-    --mdc-icon-size: 20px;
-    color: var(--error-color, #db4437);
-    transition: color 0.3s ease;
-  }
-
-  .lock-icon.unlocked {
-    color: var(--success-color, #43a047);
-  }
-
-  .timeout-bar {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    width: 100%;
-    height: 3px;
-    background: var(--success-color, #43a047);
-    border-radius: 0 2px 2px 0;
-    transform-origin: left;
-    will-change: transform;
-  }
-
   .toggle-container {
     flex-shrink: 0;
   }
@@ -542,9 +512,62 @@ const CARD_CSS = `
     --mdc-theme-secondary: var(--switch-checked-color, var(--primary-color));
     pointer-events: none;
   }
+
+  .entity-row.clickable ha-switch {
+    pointer-events: auto;
+  }
+
+  .empty-msg {
+    padding: 16px;
+    text-align: center;
+    color: var(--secondary-text-color);
+    font-size: 14px;
+  }
 `;
 
 // ─── Secured Card Editor ─────────────────────────────────────────────────────
+
+const EDITOR_CSS = `
+  .editor-row { margin-bottom: 16px; }
+  ha-entity-picker, ha-textfield { display: block; width: 100%; }
+  .entities-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .entities-header span {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--primary-text-color);
+  }
+  .add-btn, .remove-btn {
+    background: none;
+    border: 1px solid var(--divider-color, #e0e0e0);
+    border-radius: 8px;
+    padding: 4px 12px;
+    cursor: pointer;
+    color: var(--primary-text-color);
+    font-size: 13px;
+  }
+  .add-btn:active, .remove-btn:active {
+    background: var(--secondary-background-color);
+  }
+  .remove-btn {
+    padding: 4px 8px;
+    color: var(--error-color, #db4437);
+    border-color: var(--error-color, #db4437);
+  }
+  .entity-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .entity-item ha-entity-picker {
+    flex: 1;
+  }
+`;
 
 class SecuredCardEditor extends HTMLElement {
   constructor() {
@@ -556,12 +579,22 @@ class SecuredCardEditor extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
-    const picker = this.shadowRoot.querySelector("ha-entity-picker");
-    if (picker) picker.hass = hass;
+    // Update all entity pickers
+    this.shadowRoot.querySelectorAll("ha-entity-picker").forEach((p) => {
+      p.hass = hass;
+    });
   }
 
   setConfig(config) {
     this._config = { ...config };
+    // Migrate single entity to entities array
+    if (config.entity && !config.entities) {
+      this._config.entities = [config.entity];
+      delete this._config.entity;
+    }
+    if (!this._config.entities) {
+      this._config.entities = [];
+    }
     this._buildEditor();
   }
 
@@ -571,44 +604,68 @@ class SecuredCardEditor extends HTMLElement {
     }
 
     const style = document.createElement("style");
-    style.textContent = `
-      .editor-row { margin-bottom: 16px; }
-      ha-entity-picker, ha-textfield { display: block; width: 100%; }
-    `;
+    style.textContent = EDITOR_CSS;
     this.shadowRoot.appendChild(style);
 
-    // Entity picker
-    const row1 = createElement("div", { className: "editor-row" });
-    const entityPicker = document.createElement("ha-entity-picker");
-    if (this._hass) entityPicker.hass = this._hass;
-    entityPicker.value = this._config.entity || "";
-    entityPicker.label = "Entity";
-    entityPicker.includeDomains = [
+    const entities = this._config.entities || [];
+    const includeDomains = [
       "switch", "light", "fan", "cover", "lock",
       "script", "scene", "climate", "input_boolean", "automation",
     ];
-    entityPicker.allowCustomEntity = true;
-    entityPicker.addEventListener("value-changed", (ev) => {
-      this._config = { ...this._config, entity: ev.detail.value };
-      this._fireChanged();
-    });
-    row1.appendChild(entityPicker);
-    this.shadowRoot.appendChild(row1);
 
-    // PIN field (digits only)
+    // Entities section
+    const header = createElement("div", { className: "entities-header" });
+    header.appendChild(createElement("span", { textContent: `Entities (${entities.length})` }));
+    const addBtn = createElement("button", { className: "add-btn", textContent: "+ Hinzuf\u00fcgen" });
+    addBtn.addEventListener("click", () => {
+      this._config.entities = [...(this._config.entities || []), ""];
+      this._fireChanged();
+      this._buildEditor();
+    });
+    header.appendChild(addBtn);
+    this.shadowRoot.appendChild(header);
+
+    // Entity pickers
+    entities.forEach((entityId, index) => {
+      const item = createElement("div", { className: "entity-item" });
+
+      const picker = document.createElement("ha-entity-picker");
+      if (this._hass) picker.hass = this._hass;
+      picker.value = entityId;
+      picker.label = `Entity ${index + 1}`;
+      picker.includeDomains = includeDomains;
+      picker.allowCustomEntity = true;
+      picker.addEventListener("value-changed", (ev) => {
+        const newEntities = [...this._config.entities];
+        newEntities[index] = ev.detail.value;
+        this._config = { ...this._config, entities: newEntities };
+        this._fireChanged();
+      });
+      item.appendChild(picker);
+
+      const removeBtn = createElement("button", { className: "remove-btn", textContent: "\u2715" });
+      removeBtn.addEventListener("click", () => {
+        const newEntities = [...this._config.entities];
+        newEntities.splice(index, 1);
+        this._config = { ...this._config, entities: newEntities };
+        this._fireChanged();
+        this._buildEditor();
+      });
+      item.appendChild(removeBtn);
+
+      this.shadowRoot.appendChild(item);
+    });
+
+    // PIN field
     const row2 = createElement("div", { className: "editor-row" });
     const pinField = document.createElement("ha-textfield");
     pinField.label = `PIN (${MIN_PIN_LENGTH}-${MAX_PIN_LENGTH} Ziffern)`;
     pinField.value = this._config.pin || "";
     pinField.type = "password";
     pinField.setAttribute("inputmode", "numeric");
-    pinField.setAttribute("pattern", `[0-9]{${MIN_PIN_LENGTH},${MAX_PIN_LENGTH}}`);
     pinField.addEventListener("input", (ev) => {
-      // Sanitize: digits only
       const sanitized = ev.target.value.replace(/[^0-9]/g, "").slice(0, MAX_PIN_LENGTH);
-      if (ev.target.value !== sanitized) {
-        ev.target.value = sanitized;
-      }
+      if (ev.target.value !== sanitized) ev.target.value = sanitized;
       this._config = { ...this._config, pin: sanitized };
       this._fireChanged();
     });
@@ -672,10 +729,11 @@ class SecuredCard extends HTMLElement {
     this._pinDialog = null;
     this._built = false;
 
-    // Cached element references for targeted updates
-    this._els = {};
+    // Cached element references
+    this._headerLockIcon = null;
+    this._timeoutBar = null;
+    this._entityRows = new Map(); // entityId -> { row, icon, stateEl, switchEl }
 
-    // Parse CSS once
     const style = document.createElement("style");
     style.textContent = CARD_CSS;
     this.shadowRoot.appendChild(style);
@@ -686,18 +744,27 @@ class SecuredCard extends HTMLElement {
   }
 
   static getStubConfig() {
-    return { entity: "", pin: "", timeout: DEFAULT_TIMEOUT };
+    return { entities: [], pin: "", timeout: DEFAULT_TIMEOUT };
   }
 
   set hass(hass) {
     const oldHass = this._hass;
     this._hass = hass;
 
-    if (!this._config || !this._config.entity) return;
-    const entityId = this._config.entity;
+    const entityIds = getEntityIds(this._config);
+    if (!entityIds.length) return;
 
-    // Skip update if this entity's state object hasn't changed (reference equality)
-    if (oldHass && oldHass.states[entityId] === hass.states[entityId]) return;
+    // Check if any of our entities changed
+    let changed = !oldHass;
+    if (!changed) {
+      for (const eid of entityIds) {
+        if (oldHass.states[eid] !== hass.states[eid]) {
+          changed = true;
+          break;
+        }
+      }
+    }
+    if (!changed) return;
 
     if (this._built) {
       this._updateCard();
@@ -707,21 +774,33 @@ class SecuredCard extends HTMLElement {
   }
 
   setConfig(config) {
-    if (!config.entity) throw new Error("Entity is required");
     if (!config.pin) throw new Error("PIN is required");
     if (!/^\d+$/.test(config.pin)) throw new Error("PIN must contain only digits");
     if (config.pin.length < MIN_PIN_LENGTH) {
       throw new Error(`PIN must be at least ${MIN_PIN_LENGTH} digits`);
     }
 
-    const oldConfig = this._config;
-    this._config = config;
+    // Migrate single entity to entities array
+    const normalized = { ...config };
+    if (config.entity && !config.entities) {
+      normalized.entities = [config.entity];
+      delete normalized.entity;
+    }
+    if (!normalized.entities || !normalized.entities.length) {
+      throw new Error("At least one entity is required");
+    }
 
-    // Rebuild only if config structurally changed
+    const oldConfig = this._config;
+    this._config = normalized;
+
+    // Check if structural rebuild needed
+    const oldIds = getEntityIds(oldConfig);
+    const newIds = getEntityIds(normalized);
     if (
       !oldConfig ||
-      oldConfig.entity !== config.entity ||
-      oldConfig.title !== config.title
+      oldConfig.title !== normalized.title ||
+      oldIds.length !== newIds.length ||
+      oldIds.some((id, i) => id !== newIds[i])
     ) {
       this._built = false;
     }
@@ -736,7 +815,8 @@ class SecuredCard extends HTMLElement {
   }
 
   getCardSize() {
-    return 2;
+    const entityIds = getEntityIds(this._config);
+    return 1 + entityIds.length;
   }
 
   connectedCallback() {
@@ -747,30 +827,74 @@ class SecuredCard extends HTMLElement {
 
   disconnectedCallback() {
     this._clearTimers();
-    // Clean up orphaned PIN dialog
     if (this._pinDialog) {
       this._pinDialog.remove();
       this._pinDialog = null;
     }
   }
 
-  /** Full DOM build - called once or on structural config changes */
+  /** Full DOM build */
   _buildCard() {
     if (!this._hass || !this._config) return;
 
-    // Remove everything except the <style> element
     while (this.shadowRoot.childNodes.length > 1) {
       this.shadowRoot.removeChild(this.shadowRoot.lastChild);
     }
 
-    const entityId = this._config.entity;
-    const stateObj = this._hass.states[entityId];
+    this._entityRows.clear();
 
-    // ha-card wrapper
     const haCard = document.createElement("ha-card");
+    const entityIds = getEntityIds(this._config);
+
+    // ── Card header with title + lock icon ──
+    const header = createElement("div", { className: "card-header" });
+
+    const titleText = this._config.title || "Secured Card";
+    const titleEl = createElement("div", { className: "card-header-title", textContent: titleText });
+    header.appendChild(titleEl);
+
+    const lockIcon = document.createElement("ha-icon");
+    lockIcon.className = `header-lock${this._unlocked ? " unlocked" : ""}`;
+    lockIcon.setAttribute("icon", this._unlocked ? "mdi:lock-open" : "mdi:lock");
+    lockIcon.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (!this._unlocked) this._showPin();
+    });
+    header.appendChild(lockIcon);
+    this._headerLockIcon = lockIcon;
+
+    haCard.appendChild(header);
+
+    // ── Timeout bar ──
+    const timeoutBar = createElement("div", { className: "timeout-bar" });
+    timeoutBar.style.transform = this._unlocked ? "scaleX(1)" : "scaleX(0)";
+    haCard.appendChild(timeoutBar);
+    this._timeoutBar = timeoutBar;
+
+    // ── Entity rows ──
+    if (!entityIds.length) {
+      haCard.appendChild(createElement("div", { className: "empty-msg", textContent: "Keine Entities konfiguriert" }));
+    }
+
+    entityIds.forEach((entityId) => {
+      const stateObj = this._hass.states[entityId];
+      const row = this._buildEntityRow(entityId, stateObj);
+      haCard.appendChild(row);
+    });
+
+    this.shadowRoot.appendChild(haCard);
+    this._built = true;
+  }
+
+  /** Build a single entity row */
+  _buildEntityRow(entityId, stateObj) {
+    const isUnlocked = this._unlocked;
+
+    const row = createElement("div", {
+      className: `entity-row${isUnlocked ? " clickable" : " locked"}`,
+    });
 
     if (!stateObj) {
-      const row = createElement("div", { className: "card-row" });
       const icon = document.createElement("ha-icon");
       icon.className = "entity-icon";
       icon.setAttribute("icon", "mdi:alert-circle");
@@ -781,36 +905,22 @@ class SecuredCard extends HTMLElement {
       info.appendChild(createElement("div", { className: "entity-state", textContent: entityId }));
       row.appendChild(info);
 
-      haCard.appendChild(row);
-      this.shadowRoot.appendChild(haCard);
-      this._built = false;
-      return;
+      this._entityRows.set(entityId, { row, icon: null, stateEl: null, switchEl: null });
+      return row;
     }
 
     const domain = entityId.split(".")[0];
-    const name = this._config.title || stateObj.attributes.friendly_name || entityId;
+    const name = stateObj.attributes.friendly_name || entityId;
     const iconName = stateObj.attributes.icon || DOMAIN_ICONS[domain] || "mdi:help-circle";
     const isActive = ACTIVE_STATES.includes(stateObj.state);
     const stateDisplay = STATE_TRANSLATIONS[stateObj.state] || stateObj.state;
     const isToggleable = ["switch", "light", "fan", "input_boolean", "automation"].includes(domain);
-
-    // Card row
-    const row = createElement("div", { className: "card-row" });
-    row.addEventListener("click", (e) => {
-      e.stopPropagation();
-      if (this._unlocked) {
-        this._performAction();
-      } else {
-        this._showPin();
-      }
-    });
 
     // Entity icon
     const entityIcon = document.createElement("ha-icon");
     entityIcon.className = `entity-icon${isActive ? " active" : ""}`;
     entityIcon.setAttribute("icon", iconName);
     row.appendChild(entityIcon);
-    this._els.entityIcon = entityIcon;
 
     // Entity info
     const info = createElement("div", { className: "entity-info" });
@@ -819,71 +929,57 @@ class SecuredCard extends HTMLElement {
     info.appendChild(nameEl);
     info.appendChild(stateEl);
     row.appendChild(info);
-    this._els.nameEl = nameEl;
-    this._els.stateEl = stateEl;
 
-    // Toggle switch (for togglable entities)
+    // Toggle switch
+    let switchEl = null;
     if (isToggleable) {
       const toggleContainer = createElement("div", { className: "toggle-container" });
-      const switchEl = document.createElement("ha-switch");
+      switchEl = document.createElement("ha-switch");
       switchEl.checked = stateObj.state === "on";
       toggleContainer.appendChild(switchEl);
       row.appendChild(toggleContainer);
-      this._els.switchEl = switchEl;
-    } else {
-      this._els.switchEl = null;
     }
 
-    // Lock indicator
-    const lockIndicator = createElement("div", { className: "lock-indicator" });
-    const lockIcon = document.createElement("ha-icon");
-    lockIcon.className = `lock-icon${this._unlocked ? " unlocked" : ""}`;
-    lockIcon.setAttribute("icon", this._unlocked ? "mdi:lock-open" : "mdi:lock");
-    lockIndicator.appendChild(lockIcon);
-    row.appendChild(lockIndicator);
-    this._els.lockIcon = lockIcon;
+    // Click handler: only works when unlocked
+    row.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (this._unlocked) {
+        this._performAction(entityId);
+      } else {
+        this._showPin();
+      }
+    });
 
-    // Timeout progress bar (always present, hidden via transform when locked)
-    const timeoutBar = createElement("div", { className: "timeout-bar", id: "timeout-bar" });
-    timeoutBar.style.transform = this._unlocked ? "scaleX(1)" : "scaleX(0)";
-    row.appendChild(timeoutBar);
-    this._els.timeoutBar = timeoutBar;
-
-    haCard.appendChild(row);
-    this.shadowRoot.appendChild(haCard);
-    this._built = true;
+    this._entityRows.set(entityId, { row, icon: entityIcon, stateEl, switchEl });
+    return row;
   }
 
-  /** Targeted DOM update - called on hass state changes */
+  /** Targeted update - only updates changed state values */
   _updateCard() {
     if (!this._hass || !this._config || !this._built) return;
 
-    const entityId = this._config.entity;
-    const stateObj = this._hass.states[entityId];
+    const entityIds = getEntityIds(this._config);
 
-    if (!stateObj) {
-      this._built = false;
-      this._buildCard();
-      return;
-    }
+    for (const entityId of entityIds) {
+      const stateObj = this._hass.states[entityId];
+      const cached = this._entityRows.get(entityId);
+      if (!cached || !stateObj) continue;
 
-    const domain = entityId.split(".")[0];
-    const iconName = stateObj.attributes.icon || DOMAIN_ICONS[domain] || "mdi:help-circle";
-    const isActive = ACTIVE_STATES.includes(stateObj.state);
-    const stateDisplay = STATE_TRANSLATIONS[stateObj.state] || stateObj.state;
+      const domain = entityId.split(".")[0];
+      const iconName = stateObj.attributes.icon || DOMAIN_ICONS[domain] || "mdi:help-circle";
+      const isActive = ACTIVE_STATES.includes(stateObj.state);
+      const stateDisplay = STATE_TRANSLATIONS[stateObj.state] || stateObj.state;
 
-    // Update only changed properties
-    if (this._els.entityIcon) {
-      this._els.entityIcon.className = `entity-icon${isActive ? " active" : ""}`;
-      this._els.entityIcon.setAttribute("icon", iconName);
-    }
-
-    if (this._els.stateEl) {
-      this._els.stateEl.textContent = stateDisplay;
-    }
-
-    if (this._els.switchEl) {
-      this._els.switchEl.checked = stateObj.state === "on";
+      if (cached.icon) {
+        cached.icon.className = `entity-icon${isActive ? " active" : ""}`;
+        cached.icon.setAttribute("icon", iconName);
+      }
+      if (cached.stateEl) {
+        cached.stateEl.textContent = stateDisplay;
+      }
+      if (cached.switchEl) {
+        cached.switchEl.checked = stateObj.state === "on";
+      }
     }
   }
 
@@ -894,20 +990,16 @@ class SecuredCard extends HTMLElement {
     }
 
     this._pinDialog = document.createElement("pin-dialog");
-
-    // Use non-composed events + direct listeners (events don't leak to document)
     this._pinDialog.addEventListener("pin-valid", () => {
       this._pinDialog.remove();
       this._pinDialog = null;
       this._unlock();
-      this._performAction();
     });
     this._pinDialog.addEventListener("pin-cancelled", () => {
       this._pinDialog.remove();
       this._pinDialog = null;
     });
 
-    // Append to shadow root for encapsulation
     this.shadowRoot.appendChild(this._pinDialog);
     this._pinDialog.open(this._config.pin);
   }
@@ -918,19 +1010,23 @@ class SecuredCard extends HTMLElement {
 
     this._clearTimers();
 
-    // Update lock icon
-    if (this._els.lockIcon) {
-      this._els.lockIcon.className = "lock-icon unlocked";
-      this._els.lockIcon.setAttribute("icon", "mdi:lock-open");
+    // Update header lock icon
+    if (this._headerLockIcon) {
+      this._headerLockIcon.className = "header-lock unlocked";
+      this._headerLockIcon.setAttribute("icon", "mdi:lock-open");
     }
 
-    // CSS transition for countdown bar (GPU-composited, no JS interval needed)
-    const bar = this._els.timeoutBar;
+    // Update entity rows to clickable
+    this._entityRows.forEach((cached) => {
+      cached.row.classList.remove("locked");
+      cached.row.classList.add("clickable");
+    });
+
+    // CSS transition for countdown bar
+    const bar = this._timeoutBar;
     if (bar) {
-      // Reset to full width instantly
       bar.style.transition = "none";
       bar.style.transform = "scaleX(1)";
-      // Force reflow, then animate to 0
       bar.offsetWidth;
       bar.style.transition = `transform ${timeout}s linear`;
       bar.style.transform = "scaleX(0)";
@@ -945,14 +1041,20 @@ class SecuredCard extends HTMLElement {
     this._unlocked = false;
     this._clearTimers();
 
-    // Update lock icon
-    if (this._els.lockIcon) {
-      this._els.lockIcon.className = "lock-icon";
-      this._els.lockIcon.setAttribute("icon", "mdi:lock");
+    // Update header lock icon
+    if (this._headerLockIcon) {
+      this._headerLockIcon.className = "header-lock";
+      this._headerLockIcon.setAttribute("icon", "mdi:lock");
     }
 
+    // Update entity rows to locked
+    this._entityRows.forEach((cached) => {
+      cached.row.classList.remove("clickable");
+      cached.row.classList.add("locked");
+    });
+
     // Reset timeout bar
-    const bar = this._els.timeoutBar;
+    const bar = this._timeoutBar;
     if (bar) {
       bar.style.transition = "none";
       bar.style.transform = "scaleX(0)";
@@ -966,8 +1068,7 @@ class SecuredCard extends HTMLElement {
     }
   }
 
-  _performAction() {
-    const entityId = this._config.entity;
+  _performAction(entityId) {
     const domain = entityId.split(".")[0];
     const stateObj = this._hass.states[entityId];
     if (!stateObj) return;
@@ -975,16 +1076,12 @@ class SecuredCard extends HTMLElement {
     switch (domain) {
       case "lock": {
         const isLocked = stateObj.state === "locked";
-        this._hass.callService("lock", isLocked ? "unlock" : "lock", {
-          entity_id: entityId,
-        });
+        this._hass.callService("lock", isLocked ? "unlock" : "lock", { entity_id: entityId });
         break;
       }
       case "cover": {
         const isOpen = stateObj.state === "open";
-        this._hass.callService("cover", isOpen ? "close_cover" : "open_cover", {
-          entity_id: entityId,
-        });
+        this._hass.callService("cover", isOpen ? "close_cover" : "open_cover", { entity_id: entityId });
         break;
       }
       case "script":

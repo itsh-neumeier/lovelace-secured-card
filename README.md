@@ -2,20 +2,22 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![HACS](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://hacs.xyz)
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](CHANGELOG.md)
 
 > [Deutsche Version / German Version](README_DE.md)
 
-A PIN-protected custom Lovelace card for Home Assistant. Protects entities with a PIN code that must be entered before any action can be executed.
+A PIN-protected custom Lovelace card for Home Assistant. Protects multiple entities with a single PIN code. After unlocking, entities can be toggled individually.
 
 ## Features
 
-- PIN protection for any switchable entity
+- PIN protection for multiple entities in a single card
 - Numeric keypad in native Home Assistant design
+- Unlock-first workflow: PIN unlocks the card, then click entities to toggle
 - Configurable timeout per card (auto-locks after expiry)
 - Visual countdown progress bar
 - Lock/unlock icon indicator with color transition
-- Visual config editor (no YAML required)
+- Visual config editor with dynamic entity management
+- Backward compatible: single `entity` config auto-migrates to `entities`
 - Shadow DOM encapsulation (no style conflicts)
 - Zero external dependencies (pure JavaScript)
 
@@ -59,43 +61,59 @@ A PIN-protected custom Lovelace card for Home Assistant. Protects entities with 
 
 1. Edit your dashboard
 2. Click **Add Card** and search for **Secured Card**
-3. Configure entity, PIN, timeout, and optional title
+3. Add entities, set a PIN, timeout, and optional title
 
 ### YAML Configuration
+
+```yaml
+type: custom:secured-card
+entities:
+  - switch.garage_door
+  - light.garden
+  - cover.roller_shutter
+pin: "1234"
+timeout: 60
+title: "Protected Devices"
+```
+
+Single entity (backward compatible):
 
 ```yaml
 type: custom:secured-card
 entity: switch.garage_door
 pin: "1234"
 timeout: 60
-title: "Garage Door"
 ```
 
 ### Options
 
-| Option    | Type   | Default  | Description                                  |
-|-----------|--------|----------|----------------------------------------------|
-| `entity`  | string | Required | Entity ID (e.g. `switch.garage_door`)        |
-| `pin`     | string | Required | PIN code (numeric)                           |
-| `timeout` | number | `30`     | Unlock duration in seconds (min: 5)          |
-| `title`   | string | -        | Optional title (defaults to friendly_name)   |
+| Option     | Type     | Default  | Description                                       |
+|------------|----------|----------|---------------------------------------------------|
+| `entities` | string[] | Required | List of entity IDs                                |
+| `entity`   | string   | -        | Single entity ID (auto-migrated to `entities`)    |
+| `pin`      | string   | Required | PIN code (numeric, min 4 digits)                  |
+| `timeout`  | number   | `30`     | Unlock duration in seconds (min: 5)               |
+| `title`    | string   | -        | Optional card title (defaults to "Secured Card")  |
 
 ## Usage
 
-1. Click on the card to open the PIN dialog
+1. Click the lock icon or any entity row to open the PIN dialog
 2. Enter the PIN using the numeric keypad and confirm
-3. On correct PIN: the action is executed and the card remains unlocked for the timeout duration
-4. While unlocked: green lock icon and countdown progress bar are shown
-5. After timeout: the card automatically locks again
+3. On correct PIN: the card unlocks (no entity is toggled yet)
+4. Click individual entities to toggle them while the card is unlocked
+5. While unlocked: green lock icon and countdown progress bar are shown
+6. After timeout: the card automatically locks again
 
 ## How It Works
 
 ```
-[Card Locked] --click--> [PIN Dialog] --correct PIN--> [Action + Unlock]
+[Card Locked] --click--> [PIN Dialog] --correct PIN--> [Card Unlocked]
                               |                              |
-                         wrong PIN                     timeout expires
+                         wrong PIN                    click entity -> toggle
                               |                              |
-                         [Shake + Error]              [Auto Re-lock]
+                         [Shake + Error]              timeout expires
+                                                             |
+                                                      [Auto Re-lock]
 ```
 
 ## Security Notes
@@ -105,7 +123,7 @@ title: "Garage Door"
 - Users with access to the browser developer tools or the HA configuration can view the PIN
 - For high-security scenarios, consider combining this card with Home Assistant's built-in user permissions and authentication
 - The card uses Shadow DOM to isolate its styles and prevent external CSS interference
-- All dynamic text content is escaped to prevent XSS
+- Constant-time PIN comparison prevents timing attacks
 
 ## Development
 

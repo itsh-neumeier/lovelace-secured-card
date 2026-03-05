@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-03-05
+
+### Added
+
+- Multi-entity support: configure multiple entities per card
+- Editor: add/remove entities dynamically with individual pickers
+- Card header with title and lock icon
+- Backward compatibility: `entity` (single) config is auto-migrated to `entities` array
+
+### Changed
+
+- Entities are no longer toggled on PIN unlock. The card only unlocks; entities must be clicked individually after unlock
+- Removed PIN attempt limit: unlimited wrong PIN entries allowed
+- Card layout: header with lock icon + timeout bar on top, entity rows below
+- Entity rows show locked/clickable state visually (opacity change)
+
 ## [1.0.0] - 2026-03-05
 
 ### Added
