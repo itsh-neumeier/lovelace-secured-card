@@ -2,7 +2,7 @@
 
 [![Lizenz: MIT](https://img.shields.io/badge/Lizenz-MIT-yellow.svg)](LICENSE)
 [![HACS](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://hacs.xyz)
-[![Version](https://img.shields.io/badge/version-1.1.2-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.1.3-blue.svg)](CHANGELOG.md)
 
 > [English Version](README.md)
 
@@ -152,12 +152,19 @@ Dieses Projekt steht unter der [MIT-Lizenz](LICENSE).
 
 ## Changelog
 
+### [1.1.3] - 2026-03-06
+
+#### Behoben
+
+- Entity-Picker im Editor unsichtbar: hass muss beim Erstellen des Pickers gesetzt werden damit er rendert; zusaetzlich nach DOM-Einfuegung erneut gesetzt
+- Timeout-Progressbar verschwand nach Entsperren: Card-Rebuild durch DOM-querySelectorAll ersetzt, aktualisiert alle Zeilen ohne die existierende Timeout-Bar zu zerstoeren
+- Unlock nutzt jetzt DOM-Queries statt Map-Iteration um garantiert ALLE Entity-Zeilen zu aktualisieren
+
 ### [1.1.2] - 2026-03-06
 
 #### Behoben
 
-- Entity-Picker im Editor funktionierte nicht: hass wird jetzt nach DOM-Einfuegung gesetzt, value-changed Events korrekt gestoppt, zaehlerbasierter Skip-Mechanismus statt Boolean-Flag
-- Nach PIN-Eingabe war nur eine Entity schaltbar: Unlock/Lock erzwingt jetzt kompletten Card-Rebuild fuer alle Entity-Zeilen
+- Entity-Picker: value-changed Events korrekt gestoppt, zaehlerbasierter Skip-Mechanismus statt Boolean-Flag
 - Entity-nicht-gefunden-Zeilen zeigen jetzt auch Schloss-Icons pro Zeile an
 
 ### [1.1.1] - 2026-03-06

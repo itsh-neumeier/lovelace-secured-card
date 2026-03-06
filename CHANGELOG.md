@@ -5,12 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.3] - 2026-03-06
+
+### Fixed
+
+- Entity picker invisible in editor: hass must be set on picker during creation for it to render; also set again after DOM insertion for robustness
+- Timeout progress bar disappeared after unlock: replaced full card rebuild with DOM querySelectorAll approach that updates all rows without destroying the existing timeout bar
+- Unlock now uses DOM queries instead of Map iteration to guarantee ALL entity rows are updated regardless of cached state
+
 ## [1.1.2] - 2026-03-06
 
 ### Fixed
 
-- Entity picker in editor did not work: hass now set after DOM insertion, value-changed events properly stopped from propagating, counter-based skip mechanism replaces boolean flag for reliable editor state
-- After PIN unlock only one entity was switchable: unlock and lock now force a full card rebuild to guarantee all entity rows reflect the correct state
+- Entity picker in editor did not work: value-changed events properly stopped from propagating, counter-based skip mechanism replaces boolean flag for reliable editor state
 - Entity-not-found rows now also display per-row lock icons when no title is configured
 
 ## [1.1.1] - 2026-03-06

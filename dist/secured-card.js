@@ -1,11 +1,11 @@
 /**
  * Secured Card - PIN-protected custom Lovelace card for Home Assistant
- * Version: 1.1.2
+ * Version: 1.1.3
  * License: MIT
  * https://github.com/itsh-neumeier/lovelace-secured-card
  */
 
-const CARD_VERSION = "1.1.2";
+const CARD_VERSION = "1.1.3";
 const DEFAULT_TIMEOUT = 30;
 const MIN_PIN_LENGTH = 4;
 const MAX_PIN_LENGTH = 10;
@@ -644,6 +644,7 @@ class SecuredCardEditor extends HTMLElement {
       const item = createElement("div", { className: "entity-item" });
 
       const picker = document.createElement("ha-entity-picker");
+      if (this._hass) picker.hass = this._hass;
       picker.value = entityId || "";
       picker.label = `Entity ${index + 1}`;
       picker.includeDomains = includeDomains;
@@ -1056,11 +1057,26 @@ class SecuredCard extends HTMLElement {
 
     this._clearTimers();
 
-    // Force full rebuild to guarantee all rows reflect unlocked state
-    this._built = false;
-    this._buildCard();
+    // Update header lock icon
+    if (this._headerLockIcon) {
+      this._headerLockIcon.className = "header-lock unlocked";
+      this._headerLockIcon.setAttribute("icon", "mdi:lock-open");
+    }
 
-    // CSS transition for countdown bar (after rebuild created new bar)
+    // Update ALL entity rows via DOM query (guaranteed to find all rows)
+    this.shadowRoot.querySelectorAll(".entity-row").forEach((row) => {
+      row.classList.remove("locked");
+      row.classList.add("clickable");
+    });
+    this.shadowRoot.querySelectorAll("ha-switch").forEach((sw) => {
+      sw.disabled = false;
+    });
+    this.shadowRoot.querySelectorAll(".row-lock").forEach((icon) => {
+      icon.className = "row-lock unlocked";
+      icon.setAttribute("icon", "mdi:lock-open");
+    });
+
+    // CSS transition for countdown bar
     const bar = this._timeoutBar;
     if (bar) {
       bar.style.transition = "none";
@@ -1079,9 +1095,31 @@ class SecuredCard extends HTMLElement {
     this._unlocked = false;
     this._clearTimers();
 
-    // Force full rebuild to guarantee all rows reflect locked state
-    this._built = false;
-    this._buildCard();
+    // Update header lock icon
+    if (this._headerLockIcon) {
+      this._headerLockIcon.className = "header-lock";
+      this._headerLockIcon.setAttribute("icon", "mdi:lock");
+    }
+
+    // Update ALL entity rows via DOM query (guaranteed to find all rows)
+    this.shadowRoot.querySelectorAll(".entity-row").forEach((row) => {
+      row.classList.remove("clickable");
+      row.classList.add("locked");
+    });
+    this.shadowRoot.querySelectorAll("ha-switch").forEach((sw) => {
+      sw.disabled = true;
+    });
+    this.shadowRoot.querySelectorAll(".row-lock").forEach((icon) => {
+      icon.className = "row-lock";
+      icon.setAttribute("icon", "mdi:lock");
+    });
+
+    // Reset timeout bar
+    const bar = this._timeoutBar;
+    if (bar) {
+      bar.style.transition = "none";
+      bar.style.transform = "scaleX(0)";
+    }
   }
 
   _clearTimers() {
