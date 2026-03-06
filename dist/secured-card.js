@@ -5,7 +5,7 @@
  * https://github.com/itsh-neumeier/lovelace-secured-card
  */
 
-const CARD_VERSION = "1.1.0";
+const CARD_VERSION = "1.1.1";
 const DEFAULT_TIMEOUT = 30;
 const MIN_PIN_LENGTH = 4;
 const MAX_PIN_LENGTH = 10;
@@ -508,13 +508,20 @@ const CARD_CSS = `
     flex-shrink: 0;
   }
 
+  .row-lock {
+    --mdc-icon-size: 18px;
+    color: var(--error-color, #db4437);
+    transition: color 0.3s ease;
+    flex-shrink: 0;
+  }
+
+  .row-lock.unlocked {
+    color: var(--success-color, #43a047);
+  }
+
   ha-switch {
     --mdc-theme-secondary: var(--switch-checked-color, var(--primary-color));
     pointer-events: none;
-  }
-
-  .entity-row.clickable ha-switch {
-    pointer-events: auto;
   }
 
   .empty-msg {
@@ -575,6 +582,8 @@ class SecuredCardEditor extends HTMLElement {
     this.attachShadow({ mode: "open" });
     this._config = {};
     this._hass = null;
+    this._editorBuilt = false;
+    this._internalChange = false;
   }
 
   set hass(hass) {
@@ -594,6 +603,11 @@ class SecuredCardEditor extends HTMLElement {
     }
     if (!this._config.entities) {
       this._config.entities = [];
+    }
+    // Skip rebuild if this setConfig was triggered by our own _fireChanged
+    if (this._internalChange) {
+      this._internalChange = false;
+      return;
     }
     this._buildEditor();
   }
@@ -704,6 +718,7 @@ class SecuredCardEditor extends HTMLElement {
   }
 
   _fireChanged() {
+    this._internalChange = true;
     this.dispatchEvent(
       new CustomEvent("config-changed", {
         detail: { config: this._config },
@@ -846,24 +861,26 @@ class SecuredCard extends HTMLElement {
     const haCard = document.createElement("ha-card");
     const entityIds = getEntityIds(this._config);
 
-    // ── Card header with title + lock icon ──
-    const header = createElement("div", { className: "card-header" });
+    // ── Card header (only if title configured) ──
+    if (this._config.title) {
+      const header = createElement("div", { className: "card-header" });
+      const titleEl = createElement("div", { className: "card-header-title", textContent: this._config.title });
+      header.appendChild(titleEl);
 
-    const titleText = this._config.title || "Secured Card";
-    const titleEl = createElement("div", { className: "card-header-title", textContent: titleText });
-    header.appendChild(titleEl);
+      const lockIcon = document.createElement("ha-icon");
+      lockIcon.className = `header-lock${this._unlocked ? " unlocked" : ""}`;
+      lockIcon.setAttribute("icon", this._unlocked ? "mdi:lock-open" : "mdi:lock");
+      lockIcon.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (!this._unlocked) this._showPin();
+      });
+      header.appendChild(lockIcon);
+      this._headerLockIcon = lockIcon;
 
-    const lockIcon = document.createElement("ha-icon");
-    lockIcon.className = `header-lock${this._unlocked ? " unlocked" : ""}`;
-    lockIcon.setAttribute("icon", this._unlocked ? "mdi:lock-open" : "mdi:lock");
-    lockIcon.addEventListener("click", (e) => {
-      e.stopPropagation();
-      if (!this._unlocked) this._showPin();
-    });
-    header.appendChild(lockIcon);
-    this._headerLockIcon = lockIcon;
-
-    haCard.appendChild(header);
+      haCard.appendChild(header);
+    } else {
+      this._headerLockIcon = null;
+    }
 
     // ── Timeout bar ──
     const timeoutBar = createElement("div", { className: "timeout-bar" });
@@ -936,11 +953,21 @@ class SecuredCard extends HTMLElement {
       const toggleContainer = createElement("div", { className: "toggle-container" });
       switchEl = document.createElement("ha-switch");
       switchEl.checked = stateObj.state === "on";
+      switchEl.disabled = !isUnlocked;
       toggleContainer.appendChild(switchEl);
       row.appendChild(toggleContainer);
     }
 
-    // Click handler: only works when unlocked
+    // Lock icon per row (when no card title/header)
+    let rowLockIcon = null;
+    if (!this._config.title) {
+      rowLockIcon = document.createElement("ha-icon");
+      rowLockIcon.className = `row-lock${isUnlocked ? " unlocked" : ""}`;
+      rowLockIcon.setAttribute("icon", isUnlocked ? "mdi:lock-open" : "mdi:lock");
+      row.appendChild(rowLockIcon);
+    }
+
+    // Click handler
     row.addEventListener("click", (e) => {
       e.stopPropagation();
       if (this._unlocked) {
@@ -950,7 +977,7 @@ class SecuredCard extends HTMLElement {
       }
     });
 
-    this._entityRows.set(entityId, { row, icon: entityIcon, stateEl, switchEl });
+    this._entityRows.set(entityId, { row, icon: entityIcon, stateEl, switchEl, rowLockIcon });
     return row;
   }
 
@@ -1020,6 +1047,11 @@ class SecuredCard extends HTMLElement {
     this._entityRows.forEach((cached) => {
       cached.row.classList.remove("locked");
       cached.row.classList.add("clickable");
+      if (cached.switchEl) cached.switchEl.disabled = false;
+      if (cached.rowLockIcon) {
+        cached.rowLockIcon.className = "row-lock unlocked";
+        cached.rowLockIcon.setAttribute("icon", "mdi:lock-open");
+      }
     });
 
     // CSS transition for countdown bar
@@ -1051,6 +1083,11 @@ class SecuredCard extends HTMLElement {
     this._entityRows.forEach((cached) => {
       cached.row.classList.remove("clickable");
       cached.row.classList.add("locked");
+      if (cached.switchEl) cached.switchEl.disabled = true;
+      if (cached.rowLockIcon) {
+        cached.rowLockIcon.className = "row-lock";
+        cached.rowLockIcon.setAttribute("icon", "mdi:lock");
+      }
     });
 
     // Reset timeout bar
