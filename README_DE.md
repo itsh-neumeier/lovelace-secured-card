@@ -2,7 +2,7 @@
 
 [![Lizenz: MIT](https://img.shields.io/badge/Lizenz-MIT-yellow.svg)](LICENSE)
 [![HACS](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://hacs.xyz)
-[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.1.2-blue.svg)](CHANGELOG.md)
 
 > [English Version](README.md)
 
@@ -151,6 +151,22 @@ Wenn du die Card anpassen moechtest:
 Dieses Projekt steht unter der [MIT-Lizenz](LICENSE).
 
 ## Changelog
+
+### [1.1.2] - 2026-03-06
+
+#### Behoben
+
+- Entity-Picker im Editor funktionierte nicht: hass wird jetzt nach DOM-Einfuegung gesetzt, value-changed Events korrekt gestoppt, zaehlerbasierter Skip-Mechanismus statt Boolean-Flag
+- Nach PIN-Eingabe war nur eine Entity schaltbar: Unlock/Lock erzwingt jetzt kompletten Card-Rebuild fuer alle Entity-Zeilen
+- Entity-nicht-gefunden-Zeilen zeigen jetzt auch Schloss-Icons pro Zeile an
+
+### [1.1.1] - 2026-03-06
+
+#### Behoben
+
+- Switches (ha-switch) waren vor PIN-Eingabe klickbar; jetzt deaktiviert bis Card entsperrt
+- Ungewollter Standard-Titel "Secured Card" entfernt; Schloss-Icon pro Entity-Zeile stattdessen
+- PIN-Eingabefeld im Editor verlor nach jeder Taste den Fokus; Editor wird bei internen Aenderungen nicht mehr neu aufgebaut
 
 ### [1.1.0] - 2026-03-05
 

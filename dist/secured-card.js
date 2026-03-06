@@ -1,11 +1,11 @@
 /**
  * Secured Card - PIN-protected custom Lovelace card for Home Assistant
- * Version: 1.1.0
+ * Version: 1.1.2
  * License: MIT
  * https://github.com/itsh-neumeier/lovelace-secured-card
  */
 
-const CARD_VERSION = "1.1.1";
+const CARD_VERSION = "1.1.2";
 const DEFAULT_TIMEOUT = 30;
 const MIN_PIN_LENGTH = 4;
 const MAX_PIN_LENGTH = 10;
@@ -583,12 +583,12 @@ class SecuredCardEditor extends HTMLElement {
     this._config = {};
     this._hass = null;
     this._editorBuilt = false;
-    this._internalChange = false;
+    this._skipNextSetConfig = 0;
   }
 
   set hass(hass) {
     this._hass = hass;
-    // Update all entity pickers
+    // Update all entity pickers with current hass
     this.shadowRoot.querySelectorAll("ha-entity-picker").forEach((p) => {
       p.hass = hass;
     });
@@ -605,8 +605,8 @@ class SecuredCardEditor extends HTMLElement {
       this._config.entities = [];
     }
     // Skip rebuild if this setConfig was triggered by our own _fireChanged
-    if (this._internalChange) {
-      this._internalChange = false;
+    if (this._skipNextSetConfig > 0) {
+      this._skipNextSetConfig--;
       return;
     }
     this._buildEditor();
@@ -633,8 +633,8 @@ class SecuredCardEditor extends HTMLElement {
     const addBtn = createElement("button", { className: "add-btn", textContent: "+ Hinzuf\u00fcgen" });
     addBtn.addEventListener("click", () => {
       this._config.entities = [...(this._config.entities || []), ""];
-      this._fireChanged();
       this._buildEditor();
+      this._fireChanged();
     });
     header.appendChild(addBtn);
     this.shadowRoot.appendChild(header);
@@ -644,14 +644,15 @@ class SecuredCardEditor extends HTMLElement {
       const item = createElement("div", { className: "entity-item" });
 
       const picker = document.createElement("ha-entity-picker");
-      if (this._hass) picker.hass = this._hass;
-      picker.value = entityId;
+      picker.value = entityId || "";
       picker.label = `Entity ${index + 1}`;
       picker.includeDomains = includeDomains;
-      picker.allowCustomEntity = true;
       picker.addEventListener("value-changed", (ev) => {
+        ev.stopPropagation();
+        const newVal = ev.detail?.value ?? "";
+        if (newVal === (this._config.entities[index] || "")) return;
         const newEntities = [...this._config.entities];
-        newEntities[index] = ev.detail.value;
+        newEntities[index] = newVal;
         this._config = { ...this._config, entities: newEntities };
         this._fireChanged();
       });
@@ -662,8 +663,8 @@ class SecuredCardEditor extends HTMLElement {
         const newEntities = [...this._config.entities];
         newEntities.splice(index, 1);
         this._config = { ...this._config, entities: newEntities };
-        this._fireChanged();
         this._buildEditor();
+        this._fireChanged();
       });
       item.appendChild(removeBtn);
 
@@ -715,13 +716,22 @@ class SecuredCardEditor extends HTMLElement {
     });
     row4.appendChild(titleField);
     this.shadowRoot.appendChild(row4);
+
+    this._editorBuilt = true;
+
+    // Set hass on pickers AFTER they are in the DOM
+    if (this._hass) {
+      this.shadowRoot.querySelectorAll("ha-entity-picker").forEach((p) => {
+        p.hass = this._hass;
+      });
+    }
   }
 
   _fireChanged() {
-    this._internalChange = true;
+    this._skipNextSetConfig++;
     this.dispatchEvent(
       new CustomEvent("config-changed", {
-        detail: { config: this._config },
+        detail: { config: { ...this._config } },
         bubbles: true,
         composed: true,
       })
@@ -922,7 +932,16 @@ class SecuredCard extends HTMLElement {
       info.appendChild(createElement("div", { className: "entity-state", textContent: entityId }));
       row.appendChild(info);
 
-      this._entityRows.set(entityId, { row, icon: null, stateEl: null, switchEl: null });
+      // Lock icon per row (when no card title/header)
+      let rowLockIcon = null;
+      if (!this._config.title) {
+        rowLockIcon = document.createElement("ha-icon");
+        rowLockIcon.className = `row-lock${isUnlocked ? " unlocked" : ""}`;
+        rowLockIcon.setAttribute("icon", isUnlocked ? "mdi:lock-open" : "mdi:lock");
+        row.appendChild(rowLockIcon);
+      }
+
+      this._entityRows.set(entityId, { row, icon: null, stateEl: null, switchEl: null, rowLockIcon });
       return row;
     }
 
@@ -1037,24 +1056,11 @@ class SecuredCard extends HTMLElement {
 
     this._clearTimers();
 
-    // Update header lock icon
-    if (this._headerLockIcon) {
-      this._headerLockIcon.className = "header-lock unlocked";
-      this._headerLockIcon.setAttribute("icon", "mdi:lock-open");
-    }
+    // Force full rebuild to guarantee all rows reflect unlocked state
+    this._built = false;
+    this._buildCard();
 
-    // Update entity rows to clickable
-    this._entityRows.forEach((cached) => {
-      cached.row.classList.remove("locked");
-      cached.row.classList.add("clickable");
-      if (cached.switchEl) cached.switchEl.disabled = false;
-      if (cached.rowLockIcon) {
-        cached.rowLockIcon.className = "row-lock unlocked";
-        cached.rowLockIcon.setAttribute("icon", "mdi:lock-open");
-      }
-    });
-
-    // CSS transition for countdown bar
+    // CSS transition for countdown bar (after rebuild created new bar)
     const bar = this._timeoutBar;
     if (bar) {
       bar.style.transition = "none";
@@ -1073,29 +1079,9 @@ class SecuredCard extends HTMLElement {
     this._unlocked = false;
     this._clearTimers();
 
-    // Update header lock icon
-    if (this._headerLockIcon) {
-      this._headerLockIcon.className = "header-lock";
-      this._headerLockIcon.setAttribute("icon", "mdi:lock");
-    }
-
-    // Update entity rows to locked
-    this._entityRows.forEach((cached) => {
-      cached.row.classList.remove("clickable");
-      cached.row.classList.add("locked");
-      if (cached.switchEl) cached.switchEl.disabled = true;
-      if (cached.rowLockIcon) {
-        cached.rowLockIcon.className = "row-lock";
-        cached.rowLockIcon.setAttribute("icon", "mdi:lock");
-      }
-    });
-
-    // Reset timeout bar
-    const bar = this._timeoutBar;
-    if (bar) {
-      bar.style.transition = "none";
-      bar.style.transform = "scaleX(0)";
-    }
+    // Force full rebuild to guarantee all rows reflect locked state
+    this._built = false;
+    this._buildCard();
   }
 
   _clearTimers() {
