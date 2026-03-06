@@ -2,7 +2,7 @@
 
 [![Lizenz: MIT](https://img.shields.io/badge/Lizenz-MIT-yellow.svg)](LICENSE)
 [![HACS](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://hacs.xyz)
-[![Version](https://img.shields.io/badge/version-1.1.3-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)](CHANGELOG.md)
 
 > [English Version](README.md)
 
@@ -13,11 +13,12 @@ Eine PIN-geschuetzte Custom Lovelace Card fuer Home Assistant. Schuetzt mehrere 
 - PIN-Schutz fuer mehrere Entitaeten in einer einzigen Card
 - Numerisches Keypad im nativen Home Assistant Design
 - Unlock-First-Workflow: PIN entsperrt die Card, dann Entitaeten einzeln klicken
+- **Per-Entity Anpassung**: Eigener Name, Icon und Icon-Farbe pro Entity
 - Konfigurierbarer Timeout pro Card (automatische Sperrung nach Ablauf)
 - Visueller Countdown-Balken
 - Schloss-Icon mit Farbwechsel (rot = gesperrt, gruen = entsperrt)
-- Visueller Config-Editor mit dynamischer Entity-Verwaltung
-- Rueckwaertskompatibel: `entity` (einzeln) wird automatisch zu `entities` migriert
+- Visueller Config-Editor mit nativen HA-Formularelementen (`ha-form`)
+- Rueckwaertskompatibel: `entity` (einzeln) und String-Arrays werden automatisch migriert
 - Shadow DOM Kapselung (keine Style-Konflikte)
 - Keine externen Abhaengigkeiten (reines JavaScript)
 
@@ -68,13 +69,21 @@ Eine PIN-geschuetzte Custom Lovelace Card fuer Home Assistant. Schuetzt mehrere 
 ```yaml
 type: custom:secured-card
 entities:
-  - switch.garage_door
-  - light.garden
+  - entity: switch.garage_door
+    name: "Garagentor"
+    icon: mdi:garage
+    icon_color: deep-orange
+  - entity: light.garden
+    name: "Gartenlicht"
+    icon: mdi:flower
+    icon_color: green
   - cover.roller_shutter
 pin: "1234"
 timeout: 60
 title: "Geschuetzte Geraete"
 ```
+
+Entities koennen als einfache Strings oder als Objekte mit optionalen Anpassungen angegeben werden.
 
 Einzelne Entity (rueckwaertskompatibel):
 
@@ -87,13 +96,22 @@ timeout: 60
 
 ### Optionen
 
-| Option     | Typ      | Standard     | Beschreibung                                        |
-|------------|----------|--------------|-----------------------------------------------------|
-| `entities` | string[] | Erforderlich | Liste von Entity IDs                                |
-| `entity`   | string   | -            | Einzelne Entity ID (wird zu `entities` migriert)    |
-| `pin`      | string   | Erforderlich | PIN-Code (numerisch, mind. 4 Ziffern)               |
-| `timeout`  | number   | `30`         | Freischalt-Dauer in Sekunden (Minimum: 5)           |
-| `title`    | string   | -            | Optionaler Card-Titel (Standard: "Secured Card")    |
+| Option     | Typ              | Standard     | Beschreibung                                        |
+|------------|------------------|--------------|-----------------------------------------------------|
+| `entities` | string\|object[] | Erforderlich | Liste von Entity IDs oder Entity-Objekten           |
+| `entity`   | string           | -            | Einzelne Entity ID (wird zu `entities` migriert)    |
+| `pin`      | string           | Erforderlich | PIN-Code (numerisch, mind. 4 Ziffern)               |
+| `timeout`  | number           | `30`         | Freischalt-Dauer in Sekunden (Minimum: 5)           |
+| `title`    | string           | -            | Optionaler Card-Titel                               |
+
+#### Entity-Objekt Optionen
+
+| Option       | Typ    | Standard              | Beschreibung                                     |
+|--------------|--------|-----------------------|--------------------------------------------------|
+| `entity`     | string | Erforderlich          | Entity ID                                        |
+| `name`       | string | friendly_name         | Angezeigter Name (ueberschreibt friendly_name)   |
+| `icon`       | string | Domain-/Entity-Icon   | Eigenes Icon (z.B. `mdi:garage`)                 |
+| `icon_color` | string | -                     | Icon-Farbe (HA-Name oder CSS, z.B. `deep-orange`, `#ff5722`) |
 
 ## Nutzungsanleitung
 
@@ -151,6 +169,19 @@ Wenn du die Card anpassen moechtest:
 Dieses Projekt steht unter der [MIT-Lizenz](LICENSE).
 
 ## Changelog
+
+### [1.2.0] - 2026-03-06
+
+#### Hinzugefuegt
+
+- Per-Entity Anpassung: Optionaler `name`, `icon` und `icon_color` pro Entity
+- Entities unterstuetzen String-Format und Objekt-Format (`{ entity, name?, icon?, icon_color? }`)
+- `icon_color` unterstuetzt HA-Farbnamen (z.B. `deep-purple`) und CSS-Farben (`#hex`, `rgb()`)
+- Editor mit nativen `ha-form` Elementen: Entity-Picker, Icon-Picker, Farbauswahl
+
+#### Geaendert
+
+- Editor nutzt `ha-form` mit Schema-basiertem Rendering statt manueller `ha-entity-picker` / `ha-textfield` Elemente
 
 ### [1.1.3] - 2026-03-06
 

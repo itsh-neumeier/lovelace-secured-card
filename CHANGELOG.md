@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-03-06
+
+### Added
+
+- Per-entity customization: optional `name`, `icon`, and `icon_color` for each entity
+- Entities now support both string format (`"switch.light"`) and object format (`{ entity, name?, icon?, icon_color? }`)
+- `icon_color` supports HA color names (e.g. `deep-purple`, `light-blue`) and CSS colors (`#hex`, `rgb()`)
+- Editor rewritten with `ha-form`: native HA form elements for entity picker, icon picker, and color selector
+- Helper functions: `normalizeEntities()`, `resolveColor()`, `getEntityConf()`
+
+### Changed
+
+- Editor uses `ha-form` with schema-based rendering instead of manual `ha-entity-picker` / `ha-textfield` elements
+- Entity rows respect custom name, icon, and icon_color during both build and incremental update
+- Entity config objects are cleaned of empty optional fields on change
+
 ## [1.1.3] - 2026-03-06
 
 ### Fixed

@@ -1,11 +1,11 @@
 /**
  * Secured Card - PIN-protected custom Lovelace card for Home Assistant
- * Version: 1.1.3
+ * Version: 1.2.0
  * License: MIT
  * https://github.com/itsh-neumeier/lovelace-secured-card
  */
 
-const CARD_VERSION = "1.1.3";
+const CARD_VERSION = "1.2.0";
 const DEFAULT_TIMEOUT = 30;
 const MIN_PIN_LENGTH = 4;
 const MAX_PIN_LENGTH = 10;
@@ -22,6 +22,11 @@ const DOMAIN_ICONS = {
   input_boolean: "mdi:toggle-switch-outline",
   automation: "mdi:robot",
 };
+
+const ENTITY_DOMAINS = [
+  "switch", "light", "fan", "cover", "lock",
+  "script", "scene", "climate", "input_boolean", "automation",
+];
 
 const ACTIVE_STATES = ["on", "open", "unlocked", "home", "playing"];
 
@@ -71,15 +76,48 @@ function createElement(tag, opts) {
   return el;
 }
 
-/** Get entity IDs from config (supports both `entity` and `entities`) */
+/** Normalize entities to object format { entity, name?, icon?, icon_color? } */
+function normalizeEntities(entities) {
+  if (!entities || !Array.isArray(entities)) return [];
+  return entities.map((e) =>
+    typeof e === "string" ? { entity: e } : { ...e }
+  );
+}
+
+/** Get entity IDs from config (supports strings and objects) */
 function getEntityIds(config) {
   if (config.entities && Array.isArray(config.entities)) {
-    return config.entities;
+    return config.entities
+      .map((e) => (typeof e === "string" ? e : e.entity))
+      .filter(Boolean);
   }
   if (config.entity) {
     return [config.entity];
   }
   return [];
+}
+
+/** Get entity config object by ID */
+function getEntityConf(entities, entityId) {
+  if (!entities || !Array.isArray(entities)) return {};
+  const entry = entities.find(
+    (e) => (typeof e === "string" ? e : e.entity) === entityId
+  );
+  if (!entry) return {};
+  return typeof entry === "string" ? { entity: entry } : entry;
+}
+
+/** Resolve HA color names to CSS colors */
+function resolveColor(color) {
+  if (!color) return null;
+  if (color.startsWith("#") || color.startsWith("rgb")) return color;
+  const mapping = {
+    "deep-purple": "#673ab7",
+    "deep-orange": "#ff5722",
+    "light-blue": "#03a9f4",
+    "light-green": "#8bc34a",
+  };
+  return mapping[color] || color;
 }
 
 // ─── PIN Dialog CSS ──────────────────────────────────────────────────────────
@@ -532,11 +570,9 @@ const CARD_CSS = `
   }
 `;
 
-// ─── Secured Card Editor ─────────────────────────────────────────────────────
+// ─── Secured Card Editor (ha-form based) ─────────────────────────────────────
 
 const EDITOR_CSS = `
-  .editor-row { margin-bottom: 16px; }
-  ha-entity-picker, ha-textfield { display: block; width: 100%; }
   .entities-header {
     display: flex;
     align-items: center;
@@ -564,17 +600,56 @@ const EDITOR_CSS = `
     padding: 4px 8px;
     color: var(--error-color, #db4437);
     border-color: var(--error-color, #db4437);
+    align-self: flex-start;
+    margin-top: 12px;
   }
   .entity-item {
     display: flex;
-    align-items: center;
     gap: 8px;
-    margin-bottom: 8px;
+    margin-bottom: 12px;
+    padding: 12px;
+    border: 1px solid var(--divider-color, #e0e0e0);
+    border-radius: 8px;
   }
-  .entity-item ha-entity-picker {
+  .entity-form {
     flex: 1;
+    min-width: 0;
+  }
+  .entity-form ha-form {
+    display: block;
+  }
+  .global-settings {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--divider-color, #e0e0e0);
   }
 `;
+
+const ENTITY_SCHEMA = [
+  {
+    name: "entity",
+    required: true,
+    selector: { entity: { domain: ENTITY_DOMAINS } },
+  },
+  { name: "name", selector: { text: {} } },
+  {
+    type: "grid",
+    name: "",
+    schema: [
+      { name: "icon", selector: { icon: {} }, context: { icon_entity: "entity" } },
+      { name: "icon_color", selector: { ui_color: {} } },
+    ],
+  },
+];
+
+const GLOBAL_SCHEMA = [
+  { name: "pin", required: true, selector: { text: { type: "password" } } },
+  {
+    name: "timeout",
+    selector: { number: { min: 5, max: 3600, unit_of_measurement: "s", mode: "box" } },
+  },
+  { name: "title", selector: { text: {} } },
+];
 
 class SecuredCardEditor extends HTMLElement {
   constructor() {
@@ -588,9 +663,9 @@ class SecuredCardEditor extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
-    // Update all entity pickers with current hass
-    this.shadowRoot.querySelectorAll("ha-entity-picker").forEach((p) => {
-      p.hass = hass;
+    // Update all ha-form instances with current hass
+    this.shadowRoot.querySelectorAll("ha-form").forEach((f) => {
+      f.hass = hass;
     });
   }
 
@@ -598,12 +673,10 @@ class SecuredCardEditor extends HTMLElement {
     this._config = { ...config };
     // Migrate single entity to entities array
     if (config.entity && !config.entities) {
-      this._config.entities = [config.entity];
+      this._config.entities = [{ entity: config.entity }];
       delete this._config.entity;
     }
-    if (!this._config.entities) {
-      this._config.entities = [];
-    }
+    this._config.entities = normalizeEntities(this._config.entities);
     // Skip rebuild if this setConfig was triggered by our own _fireChanged
     if (this._skipNextSetConfig > 0) {
       this._skipNextSetConfig--;
@@ -622,44 +695,61 @@ class SecuredCardEditor extends HTMLElement {
     this.shadowRoot.appendChild(style);
 
     const entities = this._config.entities || [];
-    const includeDomains = [
-      "switch", "light", "fan", "cover", "lock",
-      "script", "scene", "climate", "input_boolean", "automation",
-    ];
 
-    // Entities section
+    // ── Entities header ──
     const header = createElement("div", { className: "entities-header" });
-    header.appendChild(createElement("span", { textContent: `Entities (${entities.length})` }));
-    const addBtn = createElement("button", { className: "add-btn", textContent: "+ Hinzuf\u00fcgen" });
+    header.appendChild(
+      createElement("span", { textContent: `Entities (${entities.length})` })
+    );
+    const addBtn = createElement("button", {
+      className: "add-btn",
+      textContent: "+ Hinzuf\u00fcgen",
+    });
     addBtn.addEventListener("click", () => {
-      this._config.entities = [...(this._config.entities || []), ""];
+      this._config.entities = [...(this._config.entities || []), { entity: "" }];
       this._buildEditor();
       this._fireChanged();
     });
     header.appendChild(addBtn);
     this.shadowRoot.appendChild(header);
 
-    // Entity pickers
-    entities.forEach((entityId, index) => {
+    // ── Per-entity ha-form instances ──
+    entities.forEach((entityConf, index) => {
       const item = createElement("div", { className: "entity-item" });
 
-      const picker = document.createElement("ha-entity-picker");
-      if (this._hass) picker.hass = this._hass;
-      picker.value = entityId || "";
-      picker.label = `Entity ${index + 1}`;
-      picker.includeDomains = includeDomains;
-      picker.addEventListener("value-changed", (ev) => {
+      const formWrapper = createElement("div", { className: "entity-form" });
+      const form = document.createElement("ha-form");
+      if (this._hass) form.hass = this._hass;
+      form.data = entityConf;
+      form.schema = ENTITY_SCHEMA;
+      form.computeLabel = (schema) => {
+        const labels = {
+          entity: `Entity ${index + 1}`,
+          name: "Name (optional)",
+          icon: "Icon",
+          icon_color: "Icon-Farbe",
+        };
+        return labels[schema.name] || schema.name;
+      };
+      form.addEventListener("value-changed", (ev) => {
         ev.stopPropagation();
-        const newVal = ev.detail?.value ?? "";
-        if (newVal === (this._config.entities[index] || "")) return;
         const newEntities = [...this._config.entities];
-        newEntities[index] = newVal;
+        const updated = { ...ev.detail.value };
+        // Clean empty optional fields
+        if (!updated.name) delete updated.name;
+        if (!updated.icon) delete updated.icon;
+        if (!updated.icon_color) delete updated.icon_color;
+        newEntities[index] = updated;
         this._config = { ...this._config, entities: newEntities };
         this._fireChanged();
       });
-      item.appendChild(picker);
+      formWrapper.appendChild(form);
+      item.appendChild(formWrapper);
 
-      const removeBtn = createElement("button", { className: "remove-btn", textContent: "\u2715" });
+      const removeBtn = createElement("button", {
+        className: "remove-btn",
+        textContent: "\u2715",
+      });
       removeBtn.addEventListener("click", () => {
         const newEntities = [...this._config.entities];
         newEntities.splice(index, 1);
@@ -672,60 +762,39 @@ class SecuredCardEditor extends HTMLElement {
       this.shadowRoot.appendChild(item);
     });
 
-    // PIN field
-    const row2 = createElement("div", { className: "editor-row" });
-    const pinField = document.createElement("ha-textfield");
-    pinField.label = `PIN (${MIN_PIN_LENGTH}-${MAX_PIN_LENGTH} Ziffern)`;
-    pinField.value = this._config.pin || "";
-    pinField.type = "password";
-    pinField.setAttribute("inputmode", "numeric");
-    pinField.addEventListener("input", (ev) => {
-      const sanitized = ev.target.value.replace(/[^0-9]/g, "").slice(0, MAX_PIN_LENGTH);
-      if (ev.target.value !== sanitized) ev.target.value = sanitized;
-      this._config = { ...this._config, pin: sanitized };
+    // ── Global settings ha-form ──
+    const globalWrapper = createElement("div", { className: "global-settings" });
+    const globalForm = document.createElement("ha-form");
+    if (this._hass) globalForm.hass = this._hass;
+    globalForm.data = {
+      pin: this._config.pin || "",
+      timeout: this._config.timeout ?? DEFAULT_TIMEOUT,
+      title: this._config.title || "",
+    };
+    globalForm.schema = GLOBAL_SCHEMA;
+    globalForm.computeLabel = (schema) => {
+      const labels = {
+        pin: `PIN (${MIN_PIN_LENGTH}-${MAX_PIN_LENGTH} Ziffern)`,
+        timeout: "Timeout (Sekunden)",
+        title: "Titel (optional)",
+      };
+      return labels[schema.name] || schema.name;
+    };
+    globalForm.addEventListener("value-changed", (ev) => {
+      ev.stopPropagation();
+      const val = ev.detail.value;
+      this._config = {
+        ...this._config,
+        pin: val.pin || "",
+        timeout: val.timeout ?? DEFAULT_TIMEOUT,
+        title: val.title || undefined,
+      };
       this._fireChanged();
     });
-    row2.appendChild(pinField);
-    this.shadowRoot.appendChild(row2);
-
-    // Timeout field
-    const row3 = createElement("div", { className: "editor-row" });
-    const timeoutField = document.createElement("ha-textfield");
-    timeoutField.label = "Timeout (Sekunden)";
-    timeoutField.value = String(this._config.timeout ?? DEFAULT_TIMEOUT);
-    timeoutField.type = "number";
-    timeoutField.min = "5";
-    timeoutField.max = "3600";
-    timeoutField.addEventListener("input", (ev) => {
-      const val = parseInt(ev.target.value, 10);
-      if (!isNaN(val) && val >= 5) {
-        this._config = { ...this._config, timeout: val };
-        this._fireChanged();
-      }
-    });
-    row3.appendChild(timeoutField);
-    this.shadowRoot.appendChild(row3);
-
-    // Title field
-    const row4 = createElement("div", { className: "editor-row" });
-    const titleField = document.createElement("ha-textfield");
-    titleField.label = "Titel (optional)";
-    titleField.value = this._config.title || "";
-    titleField.addEventListener("input", (ev) => {
-      this._config = { ...this._config, title: ev.target.value || undefined };
-      this._fireChanged();
-    });
-    row4.appendChild(titleField);
-    this.shadowRoot.appendChild(row4);
+    globalWrapper.appendChild(globalForm);
+    this.shadowRoot.appendChild(globalWrapper);
 
     this._editorBuilt = true;
-
-    // Set hass on pickers AFTER they are in the DOM
-    if (this._hass) {
-      this.shadowRoot.querySelectorAll("ha-entity-picker").forEach((p) => {
-        p.hass = this._hass;
-      });
-    }
   }
 
   _fireChanged() {
@@ -758,7 +827,7 @@ class SecuredCard extends HTMLElement {
     // Cached element references
     this._headerLockIcon = null;
     this._timeoutBar = null;
-    this._entityRows = new Map(); // entityId -> { row, icon, stateEl, switchEl }
+    this._entityRows = new Map();
 
     const style = document.createElement("style");
     style.textContent = CARD_CSS;
@@ -806,13 +875,16 @@ class SecuredCard extends HTMLElement {
       throw new Error(`PIN must be at least ${MIN_PIN_LENGTH} digits`);
     }
 
-    // Migrate single entity to entities array
+    // Migrate and normalize
     const normalized = { ...config };
     if (config.entity && !config.entities) {
-      normalized.entities = [config.entity];
+      normalized.entities = [{ entity: config.entity }];
       delete normalized.entity;
     }
-    if (!normalized.entities || !normalized.entities.length) {
+    normalized.entities = normalizeEntities(normalized.entities);
+
+    const entityIds = getEntityIds(normalized);
+    if (!entityIds.length) {
       throw new Error("At least one entity is required");
     }
 
@@ -821,7 +893,7 @@ class SecuredCard extends HTMLElement {
 
     // Check if structural rebuild needed
     const oldIds = getEntityIds(oldConfig);
-    const newIds = getEntityIds(normalized);
+    const newIds = entityIds;
     if (
       !oldConfig ||
       oldConfig.title !== normalized.title ||
@@ -875,7 +947,10 @@ class SecuredCard extends HTMLElement {
     // ── Card header (only if title configured) ──
     if (this._config.title) {
       const header = createElement("div", { className: "card-header" });
-      const titleEl = createElement("div", { className: "card-header-title", textContent: this._config.title });
+      const titleEl = createElement("div", {
+        className: "card-header-title",
+        textContent: this._config.title,
+      });
       header.appendChild(titleEl);
 
       const lockIcon = document.createElement("ha-icon");
@@ -901,12 +976,18 @@ class SecuredCard extends HTMLElement {
 
     // ── Entity rows ──
     if (!entityIds.length) {
-      haCard.appendChild(createElement("div", { className: "empty-msg", textContent: "Keine Entities konfiguriert" }));
+      haCard.appendChild(
+        createElement("div", {
+          className: "empty-msg",
+          textContent: "Keine Entities konfiguriert",
+        })
+      );
     }
 
     entityIds.forEach((entityId) => {
       const stateObj = this._hass.states[entityId];
-      const row = this._buildEntityRow(entityId, stateObj);
+      const entityConf = getEntityConf(this._config.entities, entityId);
+      const row = this._buildEntityRow(entityId, stateObj, entityConf);
       haCard.appendChild(row);
     });
 
@@ -915,7 +996,7 @@ class SecuredCard extends HTMLElement {
   }
 
   /** Build a single entity row */
-  _buildEntityRow(entityId, stateObj) {
+  _buildEntityRow(entityId, stateObj, entityConf) {
     const isUnlocked = this._unlocked;
 
     const row = createElement("div", {
@@ -925,15 +1006,24 @@ class SecuredCard extends HTMLElement {
     if (!stateObj) {
       const icon = document.createElement("ha-icon");
       icon.className = "entity-icon";
-      icon.setAttribute("icon", "mdi:alert-circle");
+      icon.setAttribute("icon", entityConf.icon || "mdi:alert-circle");
+      if (entityConf.icon_color) {
+        icon.style.color = resolveColor(entityConf.icon_color);
+      }
       row.appendChild(icon);
 
       const info = createElement("div", { className: "entity-info" });
-      info.appendChild(createElement("div", { className: "entity-name", textContent: "Entity nicht gefunden" }));
-      info.appendChild(createElement("div", { className: "entity-state", textContent: entityId }));
+      info.appendChild(
+        createElement("div", {
+          className: "entity-name",
+          textContent: entityConf.name || "Entity nicht gefunden",
+        })
+      );
+      info.appendChild(
+        createElement("div", { className: "entity-state", textContent: entityId })
+      );
       row.appendChild(info);
 
-      // Lock icon per row (when no card title/header)
       let rowLockIcon = null;
       if (!this._config.title) {
         rowLockIcon = document.createElement("ha-icon");
@@ -942,20 +1032,33 @@ class SecuredCard extends HTMLElement {
         row.appendChild(rowLockIcon);
       }
 
-      this._entityRows.set(entityId, { row, icon: null, stateEl: null, switchEl: null, rowLockIcon });
+      row.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (!this._unlocked) this._showPin();
+      });
+
+      this._entityRows.set(entityId, {
+        row, icon: null, stateEl: null, switchEl: null, rowLockIcon, entityConf,
+      });
       return row;
     }
 
     const domain = entityId.split(".")[0];
-    const name = stateObj.attributes.friendly_name || entityId;
-    const iconName = stateObj.attributes.icon || DOMAIN_ICONS[domain] || "mdi:help-circle";
+    const name = entityConf.name || stateObj.attributes.friendly_name || entityId;
+    const iconName = entityConf.icon || stateObj.attributes.icon || DOMAIN_ICONS[domain] || "mdi:help-circle";
+    const customColor = entityConf.icon_color ? resolveColor(entityConf.icon_color) : null;
     const isActive = ACTIVE_STATES.includes(stateObj.state);
     const stateDisplay = STATE_TRANSLATIONS[stateObj.state] || stateObj.state;
     const isToggleable = ["switch", "light", "fan", "input_boolean", "automation"].includes(domain);
 
     // Entity icon
     const entityIcon = document.createElement("ha-icon");
-    entityIcon.className = `entity-icon${isActive ? " active" : ""}`;
+    if (customColor) {
+      entityIcon.className = "entity-icon";
+      entityIcon.style.color = customColor;
+    } else {
+      entityIcon.className = `entity-icon${isActive ? " active" : ""}`;
+    }
     entityIcon.setAttribute("icon", iconName);
     row.appendChild(entityIcon);
 
@@ -997,7 +1100,9 @@ class SecuredCard extends HTMLElement {
       }
     });
 
-    this._entityRows.set(entityId, { row, icon: entityIcon, stateEl, switchEl, rowLockIcon });
+    this._entityRows.set(entityId, {
+      row, icon: entityIcon, stateEl, switchEl, rowLockIcon, entityConf,
+    });
     return row;
   }
 
@@ -1013,13 +1118,21 @@ class SecuredCard extends HTMLElement {
       if (!cached || !stateObj) continue;
 
       const domain = entityId.split(".")[0];
-      const iconName = stateObj.attributes.icon || DOMAIN_ICONS[domain] || "mdi:help-circle";
+      const ec = cached.entityConf || {};
+      const iconName = ec.icon || stateObj.attributes.icon || DOMAIN_ICONS[domain] || "mdi:help-circle";
+      const customColor = ec.icon_color ? resolveColor(ec.icon_color) : null;
       const isActive = ACTIVE_STATES.includes(stateObj.state);
       const stateDisplay = STATE_TRANSLATIONS[stateObj.state] || stateObj.state;
 
       if (cached.icon) {
-        cached.icon.className = `entity-icon${isActive ? " active" : ""}`;
         cached.icon.setAttribute("icon", iconName);
+        if (customColor) {
+          cached.icon.className = "entity-icon";
+          cached.icon.style.color = customColor;
+        } else {
+          cached.icon.className = `entity-icon${isActive ? " active" : ""}`;
+          cached.icon.style.color = "";
+        }
       }
       if (cached.stateEl) {
         cached.stateEl.textContent = stateDisplay;

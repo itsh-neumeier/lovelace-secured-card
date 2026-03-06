@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![HACS](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://hacs.xyz)
-[![Version](https://img.shields.io/badge/version-1.1.3-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)](CHANGELOG.md)
 
 > [Deutsche Version / German Version](README_DE.md)
 
@@ -13,11 +13,12 @@ A PIN-protected custom Lovelace card for Home Assistant. Protects multiple entit
 - PIN protection for multiple entities in a single card
 - Numeric keypad in native Home Assistant design
 - Unlock-first workflow: PIN unlocks the card, then click entities to toggle
+- **Per-entity customization**: Custom name, icon, and icon color per entity
 - Configurable timeout per card (auto-locks after expiry)
 - Visual countdown progress bar
 - Lock/unlock icon indicator with color transition
-- Visual config editor with dynamic entity management
-- Backward compatible: single `entity` config auto-migrates to `entities`
+- Visual config editor with native HA form elements (`ha-form`)
+- Backward compatible: single `entity` and string arrays auto-migrate
 - Shadow DOM encapsulation (no style conflicts)
 - Zero external dependencies (pure JavaScript)
 
@@ -68,13 +69,21 @@ A PIN-protected custom Lovelace card for Home Assistant. Protects multiple entit
 ```yaml
 type: custom:secured-card
 entities:
-  - switch.garage_door
-  - light.garden
+  - entity: switch.garage_door
+    name: "Garage Door"
+    icon: mdi:garage
+    icon_color: deep-orange
+  - entity: light.garden
+    name: "Garden Light"
+    icon: mdi:flower
+    icon_color: green
   - cover.roller_shutter
 pin: "1234"
 timeout: 60
 title: "Protected Devices"
 ```
+
+Entities can be specified as simple strings or as objects with optional customizations.
 
 Single entity (backward compatible):
 
@@ -87,13 +96,22 @@ timeout: 60
 
 ### Options
 
-| Option     | Type     | Default  | Description                                       |
-|------------|----------|----------|---------------------------------------------------|
-| `entities` | string[] | Required | List of entity IDs                                |
-| `entity`   | string   | -        | Single entity ID (auto-migrated to `entities`)    |
-| `pin`      | string   | Required | PIN code (numeric, min 4 digits)                  |
-| `timeout`  | number   | `30`     | Unlock duration in seconds (min: 5)               |
-| `title`    | string   | -        | Optional card title (defaults to "Secured Card")  |
+| Option     | Type             | Default  | Description                                       |
+|------------|------------------|----------|---------------------------------------------------|
+| `entities` | string\|object[] | Required | List of entity IDs or entity objects               |
+| `entity`   | string           | -        | Single entity ID (auto-migrated to `entities`)    |
+| `pin`      | string           | Required | PIN code (numeric, min 4 digits)                  |
+| `timeout`  | number           | `30`     | Unlock duration in seconds (min: 5)               |
+| `title`    | string           | -        | Optional card title                               |
+
+#### Entity Object Options
+
+| Option       | Type   | Default             | Description                                      |
+|--------------|--------|---------------------|--------------------------------------------------|
+| `entity`     | string | Required            | Entity ID                                        |
+| `name`       | string | friendly_name       | Display name (overrides friendly_name)           |
+| `icon`       | string | Domain/entity icon  | Custom icon (e.g. `mdi:garage`)                  |
+| `icon_color` | string | -                   | Icon color (HA name or CSS, e.g. `deep-orange`, `#ff5722`) |
 
 ## Usage
 
