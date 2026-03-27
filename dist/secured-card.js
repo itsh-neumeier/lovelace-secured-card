@@ -452,8 +452,12 @@ customElements.define("pin-dialog", PinDialog);
 // ─── Secured Card CSS ────────────────────────────────────────────────────────
 
 const CARD_CSS = `
+  :host {
+    height: auto !important;
+  }
   ha-card {
     overflow: hidden;
+    height: auto !important;
   }
 
   .card-header {
