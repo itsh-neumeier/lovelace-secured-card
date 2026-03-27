@@ -1,11 +1,11 @@
 /**
  * Secured Card - PIN-protected custom Lovelace card for Home Assistant
- * Version: 1.2.0
+ * Version: 1.2.1
  * License: MIT
  * https://github.com/itsh-neumeier/lovelace-secured-card
  */
 
-const CARD_VERSION = "1.2.0";
+const CARD_VERSION = "1.2.1";
 const DEFAULT_TIMEOUT = 30;
 const MIN_PIN_LENGTH = 4;
 const MAX_PIN_LENGTH = 10;

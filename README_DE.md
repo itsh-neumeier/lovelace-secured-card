@@ -2,7 +2,7 @@
 
 [![Lizenz: MIT](https://img.shields.io/badge/Lizenz-MIT-yellow.svg)](LICENSE)
 [![HACS](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://hacs.xyz)
-[![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.2.1-blue.svg)](CHANGELOG.md)
 
 > [English Version](README.md)
 
@@ -169,6 +169,12 @@ Wenn du die Card anpassen moechtest:
 Dieses Projekt steht unter der [MIT-Lizenz](LICENSE).
 
 ## Changelog
+
+### [1.2.1] - 2026-03-27
+
+#### Behoben
+
+- Card-Hoehe passte sich im Grid-Layout-Editor nicht dynamisch an: `getLayoutOptions()` fuer moderne HA-Versionen hinzugefuegt
 
 ### [1.2.0] - 2026-03-06
 

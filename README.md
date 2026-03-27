@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![HACS](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://hacs.xyz)
-[![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.2.1-blue.svg)](CHANGELOG.md)
 
 > [Deutsche Version / German Version](README_DE.md)
 
