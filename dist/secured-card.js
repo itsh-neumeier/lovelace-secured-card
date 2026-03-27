@@ -917,6 +917,15 @@ class SecuredCard extends HTMLElement {
     return 1 + entityIds.length;
   }
 
+  getLayoutOptions() {
+    const entityIds = getEntityIds(this._config);
+    const rows = entityIds.length + (this._config.title ? 1 : 0);
+    return {
+      grid_rows: Math.max(1, rows),
+      grid_min_rows: Math.max(1, rows),
+    };
+  }
+
   connectedCallback() {
     if (!this._built && this._hass && this._config) {
       this._buildCard();
