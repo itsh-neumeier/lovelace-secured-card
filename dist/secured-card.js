@@ -454,11 +454,11 @@ customElements.define("pin-dialog", PinDialog);
 const CARD_CSS = `
   :host {
     display: block;
-    height: auto;
+    height: auto !important;
+    align-self: start !important;
   }
   ha-card {
     overflow: hidden;
-    height: auto;
     padding: 0 !important;
   }
 
