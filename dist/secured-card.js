@@ -458,6 +458,7 @@ const CARD_CSS = `
   ha-card {
     overflow: hidden;
     height: auto !important;
+    padding: 0 !important;
   }
 
   .card-header {
