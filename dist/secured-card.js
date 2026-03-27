@@ -453,11 +453,12 @@ customElements.define("pin-dialog", PinDialog);
 
 const CARD_CSS = `
   :host {
-    height: auto !important;
+    display: block;
+    height: auto;
   }
   ha-card {
     overflow: hidden;
-    height: auto !important;
+    height: auto;
     padding: 0 !important;
   }
 
@@ -922,12 +923,11 @@ class SecuredCard extends HTMLElement {
     return 1 + entityIds.length;
   }
 
-  getLayoutOptions() {
-    const entityIds = getEntityIds(this._config);
-    const rows = entityIds.length + (this._config.title ? 1 : 0);
+  getGridOptions() {
     return {
-      grid_rows: Math.max(1, rows),
-      grid_min_rows: Math.max(1, rows),
+      columns: 6,
+      min_columns: 3,
+      min_rows: 1,
     };
   }
 
