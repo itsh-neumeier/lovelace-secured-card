@@ -1,11 +1,11 @@
 /**
  * Secured Card - PIN-protected custom Lovelace card for Home Assistant
- * Version: 1.2.3
+ * Version: 1.2.4
  * License: MIT
  * https://github.com/itsh-neumeier/lovelace-secured-card
  */
 
-const CARD_VERSION = "1.2.3";
+const CARD_VERSION = "1.2.4";
 const DEFAULT_TIMEOUT = 30;
 const MIN_PIN_LENGTH = 4;
 const MAX_PIN_LENGTH = 10;
@@ -454,8 +454,6 @@ customElements.define("pin-dialog", PinDialog);
 const CARD_CSS = `
   :host {
     display: block;
-    height: auto !important;
-    align-self: start !important;
   }
   ha-card {
     overflow: hidden;
@@ -1165,10 +1163,13 @@ class SecuredCard extends HTMLElement {
   _applyCardStyles(haCard) {
     const cfg = this._config;
     const opacity = cfg.card_opacity !== undefined ? cfg.card_opacity / 100 : 1;
-    if (opacity < 1) {
+    // When blur is active but no explicit opacity set, default to 80% so blur is visible
+    const effectiveOpacity = cfg.backdrop_blur && opacity === 1 ? 0.8 : opacity;
+    const effectivePct = Math.round(effectiveOpacity * 100);
+    if (effectiveOpacity < 1) {
       haCard.style.setProperty(
         "--secured-card-bg",
-        `color-mix(in srgb, var(--ha-card-background, var(--card-background-color, white)) ${cfg.card_opacity}%, transparent)`
+        `color-mix(in srgb, var(--ha-card-background, var(--card-background-color, white)) ${effectivePct}%, transparent)`
       );
     } else {
       haCard.style.removeProperty("--secured-card-bg");

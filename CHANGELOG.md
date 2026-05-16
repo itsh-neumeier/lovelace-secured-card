@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.4] - 2026-05-16
+
+### Fixed
+
+- Card height not matching neighboring cards in same grid row: removed `align-self: start !important` so cards stretch to fill row height normally
+- Frosted-glass effect (backdrop-blur) invisible when `card_opacity` not set: auto-apply 80% opacity when `backdrop_blur` is enabled without explicit opacity
+
 ## [1.2.3] - 2026-05-16
 
 ### Added
