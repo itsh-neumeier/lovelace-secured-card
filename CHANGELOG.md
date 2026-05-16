@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.3] - 2026-05-16
+
+### Added
+
+- Visual customization options in card editor:
+  - `locked_color` — custom color for lock icon when card is locked
+  - `accent_color` — custom color for unlock icon and timeout bar
+  - `card_opacity` — background transparency (0–100 %)
+  - `backdrop_blur` — enable frosted-glass (Milchglas) effect
+  - `backdrop_blur_strength` — blur strength in px (0–40, default 10)
+- CSS custom properties on `ha-card` for all visual options; defaults fall back to HA theme variables
+
 ## [1.2.2] - 2026-05-16
 
 ### Fixed

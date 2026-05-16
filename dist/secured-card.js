@@ -1,11 +1,11 @@
 /**
  * Secured Card - PIN-protected custom Lovelace card for Home Assistant
- * Version: 1.2.2
+ * Version: 1.2.3
  * License: MIT
  * https://github.com/itsh-neumeier/lovelace-secured-card
  */
 
-const CARD_VERSION = "1.2.2";
+const CARD_VERSION = "1.2.3";
 const DEFAULT_TIMEOUT = 30;
 const MIN_PIN_LENGTH = 4;
 const MAX_PIN_LENGTH = 10;
@@ -460,6 +460,9 @@ const CARD_CSS = `
   ha-card {
     overflow: hidden;
     padding: 0 !important;
+    background: var(--secured-card-bg, var(--ha-card-background, var(--card-background-color, white)));
+    backdrop-filter: var(--secured-card-backdrop, none);
+    -webkit-backdrop-filter: var(--secured-card-backdrop, none);
   }
 
   .card-header {
@@ -478,18 +481,18 @@ const CARD_CSS = `
 
   .header-lock {
     --mdc-icon-size: 20px;
-    color: var(--error-color, #db4437);
+    color: var(--secured-card-locked-color, var(--error-color, #db4437));
     transition: color 0.3s ease;
     cursor: pointer;
   }
 
   .header-lock.unlocked {
-    color: var(--success-color, #43a047);
+    color: var(--secured-card-accent-color, var(--success-color, #43a047));
   }
 
   .timeout-bar {
     height: 3px;
-    background: var(--success-color, #43a047);
+    background: var(--secured-card-accent-color, var(--success-color, #43a047));
     transform-origin: left;
     will-change: transform;
     margin: 0 16px 4px;
@@ -554,13 +557,13 @@ const CARD_CSS = `
 
   .row-lock {
     --mdc-icon-size: 18px;
-    color: var(--error-color, #db4437);
+    color: var(--secured-card-locked-color, var(--error-color, #db4437));
     transition: color 0.3s ease;
     flex-shrink: 0;
   }
 
   .row-lock.unlocked {
-    color: var(--success-color, #43a047);
+    color: var(--secured-card-accent-color, var(--success-color, #43a047));
   }
 
   ha-switch {
@@ -655,6 +658,23 @@ const GLOBAL_SCHEMA = [
     selector: { number: { min: 5, max: 3600, unit_of_measurement: "s", mode: "box" } },
   },
   { name: "title", selector: { text: {} } },
+  {
+    type: "grid",
+    name: "",
+    schema: [
+      { name: "locked_color", selector: { ui_color: {} } },
+      { name: "accent_color", selector: { ui_color: {} } },
+    ],
+  },
+  {
+    name: "card_opacity",
+    selector: { number: { min: 0, max: 100, unit_of_measurement: "%", mode: "slider" } },
+  },
+  { name: "backdrop_blur", selector: { boolean: {} } },
+  {
+    name: "backdrop_blur_strength",
+    selector: { number: { min: 0, max: 40, unit_of_measurement: "px", mode: "slider" } },
+  },
 ];
 
 class SecuredCardEditor extends HTMLElement {
@@ -776,6 +796,11 @@ class SecuredCardEditor extends HTMLElement {
       pin: this._config.pin || "",
       timeout: this._config.timeout ?? DEFAULT_TIMEOUT,
       title: this._config.title || "",
+      locked_color: this._config.locked_color || "",
+      accent_color: this._config.accent_color || "",
+      card_opacity: this._config.card_opacity ?? 100,
+      backdrop_blur: this._config.backdrop_blur || false,
+      backdrop_blur_strength: this._config.backdrop_blur_strength ?? 10,
     };
     globalForm.schema = GLOBAL_SCHEMA;
     globalForm.computeLabel = (schema) => {
@@ -783,6 +808,11 @@ class SecuredCardEditor extends HTMLElement {
         pin: `PIN (${MIN_PIN_LENGTH}-${MAX_PIN_LENGTH} Ziffern)`,
         timeout: "Timeout (Sekunden)",
         title: "Titel (optional)",
+        locked_color: "Farbe: Gesperrt",
+        accent_color: "Farbe: Entsperrt / Akzent",
+        card_opacity: "Hintergrund-Transparenz (%)",
+        backdrop_blur: "Milchglas-Effekt",
+        backdrop_blur_strength: "Milchglas-Stärke (px)",
       };
       return labels[schema.name] || schema.name;
     };
@@ -794,6 +824,11 @@ class SecuredCardEditor extends HTMLElement {
         pin: val.pin || "",
         timeout: val.timeout ?? DEFAULT_TIMEOUT,
         title: val.title || undefined,
+        locked_color: val.locked_color || undefined,
+        accent_color: val.accent_color || undefined,
+        card_opacity: val.card_opacity !== 100 ? val.card_opacity : undefined,
+        backdrop_blur: val.backdrop_blur || undefined,
+        backdrop_blur_strength: val.backdrop_blur_strength !== 10 ? val.backdrop_blur_strength : undefined,
       };
       this._fireChanged();
     });
@@ -833,6 +868,7 @@ class SecuredCard extends HTMLElement {
     // Cached element references
     this._headerLockIcon = null;
     this._timeoutBar = null;
+    this._haCard = null;
     this._entityRows = new Map();
 
     const style = document.createElement("style");
@@ -959,6 +995,8 @@ class SecuredCard extends HTMLElement {
     this._entityRows.clear();
 
     const haCard = document.createElement("ha-card");
+    this._haCard = haCard;
+    this._applyCardStyles(haCard);
     const entityIds = getEntityIds(this._config);
 
     // ── Card header (only if title configured) ──
@@ -1124,8 +1162,38 @@ class SecuredCard extends HTMLElement {
   }
 
   /** Targeted update - only updates changed state values */
+  _applyCardStyles(haCard) {
+    const cfg = this._config;
+    const opacity = cfg.card_opacity !== undefined ? cfg.card_opacity / 100 : 1;
+    if (opacity < 1) {
+      haCard.style.setProperty(
+        "--secured-card-bg",
+        `color-mix(in srgb, var(--ha-card-background, var(--card-background-color, white)) ${cfg.card_opacity}%, transparent)`
+      );
+    } else {
+      haCard.style.removeProperty("--secured-card-bg");
+    }
+    if (cfg.backdrop_blur) {
+      const strength = cfg.backdrop_blur_strength ?? 10;
+      haCard.style.setProperty("--secured-card-backdrop", `blur(${strength}px)`);
+    } else {
+      haCard.style.removeProperty("--secured-card-backdrop");
+    }
+    if (cfg.locked_color) {
+      haCard.style.setProperty("--secured-card-locked-color", resolveColor(cfg.locked_color));
+    } else {
+      haCard.style.removeProperty("--secured-card-locked-color");
+    }
+    if (cfg.accent_color) {
+      haCard.style.setProperty("--secured-card-accent-color", resolveColor(cfg.accent_color));
+    } else {
+      haCard.style.removeProperty("--secured-card-accent-color");
+    }
+  }
+
   _updateCard() {
     if (!this._hass || !this._config || !this._built) return;
+    if (this._haCard) this._applyCardStyles(this._haCard);
 
     const entityIds = getEntityIds(this._config);
 
