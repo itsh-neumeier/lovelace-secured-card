@@ -57,7 +57,7 @@ class SecuredCard extends LitElement {
   }
 
   public getCardSize(): number {
-    return 2;
+    return 1;
   }
 
   public disconnectedCallback(): void {
