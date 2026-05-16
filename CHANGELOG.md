@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.8] - 2026-05-16
+
+### Fixed
+
+- Timeout-Bar nach Höhenfix nicht mehr sichtbar: Bar jetzt `position: absolute; top: 0` damit sie immer am oberen Rand klebt, unabhängig vom Flex-Zentrierung des Inhalts
+- Farbe der Timeout-Bar via `accent_color` konfigurierbar (war bereits in v1.2.3 vorhanden)
+
 ## [1.2.7] - 2026-05-16
 
 ### Fixed
