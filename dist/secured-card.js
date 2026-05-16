@@ -1,11 +1,11 @@
 /**
  * Secured Card - PIN-protected custom Lovelace card for Home Assistant
- * Version: 1.2.1
+ * Version: 1.2.2
  * License: MIT
  * https://github.com/itsh-neumeier/lovelace-secured-card
  */
 
-const CARD_VERSION = "1.2.1";
+const CARD_VERSION = "1.2.2";
 const DEFAULT_TIMEOUT = 30;
 const MIN_PIN_LENGTH = 4;
 const MAX_PIN_LENGTH = 10;
@@ -920,12 +920,15 @@ class SecuredCard extends HTMLElement {
 
   getCardSize() {
     const entityIds = getEntityIds(this._config);
-    return 1 + entityIds.length;
+    return Math.max(1, entityIds.length);
   }
 
   getGridOptions() {
+    const entityIds = getEntityIds(this._config);
+    const rows = Math.max(1, entityIds.length);
     return {
       columns: 6,
+      rows,
       min_columns: 3,
       min_rows: 1,
     };
