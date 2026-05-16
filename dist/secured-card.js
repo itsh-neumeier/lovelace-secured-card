@@ -1,11 +1,11 @@
 /**
  * Secured Card - PIN-protected custom Lovelace card for Home Assistant
- * Version: 1.2.4
+ * Version: 1.2.5
  * License: MIT
  * https://github.com/itsh-neumeier/lovelace-secured-card
  */
 
-const CARD_VERSION = "1.2.4";
+const CARD_VERSION = "1.2.5";
 const DEFAULT_TIMEOUT = 30;
 const MIN_PIN_LENGTH = 4;
 const MAX_PIN_LENGTH = 10;
@@ -138,7 +138,9 @@ const PIN_DIALOG_CSS = `
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(0, 0, 0, 0.6);
+    background: var(--pin-overlay-bg, rgba(0, 0, 0, 0.6));
+    backdrop-filter: var(--pin-backdrop-blur, none);
+    -webkit-backdrop-filter: var(--pin-backdrop-blur, none);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -459,8 +461,6 @@ const CARD_CSS = `
     overflow: hidden;
     padding: 0 !important;
     background: var(--secured-card-bg, var(--ha-card-background, var(--card-background-color, white)));
-    backdrop-filter: var(--secured-card-backdrop, none);
-    -webkit-backdrop-filter: var(--secured-card-backdrop, none);
   }
 
   .card-header {
@@ -668,9 +668,9 @@ const GLOBAL_SCHEMA = [
     name: "card_opacity",
     selector: { number: { min: 0, max: 100, unit_of_measurement: "%", mode: "slider" } },
   },
-  { name: "backdrop_blur", selector: { boolean: {} } },
+  { name: "pin_backdrop_blur", selector: { boolean: {} } },
   {
-    name: "backdrop_blur_strength",
+    name: "pin_backdrop_blur_strength",
     selector: { number: { min: 0, max: 40, unit_of_measurement: "px", mode: "slider" } },
   },
 ];
@@ -797,8 +797,8 @@ class SecuredCardEditor extends HTMLElement {
       locked_color: this._config.locked_color || "",
       accent_color: this._config.accent_color || "",
       card_opacity: this._config.card_opacity ?? 100,
-      backdrop_blur: this._config.backdrop_blur || false,
-      backdrop_blur_strength: this._config.backdrop_blur_strength ?? 10,
+      pin_backdrop_blur: this._config.pin_backdrop_blur || false,
+      pin_backdrop_blur_strength: this._config.pin_backdrop_blur_strength ?? 8,
     };
     globalForm.schema = GLOBAL_SCHEMA;
     globalForm.computeLabel = (schema) => {
@@ -809,8 +809,8 @@ class SecuredCardEditor extends HTMLElement {
         locked_color: "Farbe: Gesperrt",
         accent_color: "Farbe: Entsperrt / Akzent",
         card_opacity: "Hintergrund-Transparenz (%)",
-        backdrop_blur: "Milchglas-Effekt",
-        backdrop_blur_strength: "Milchglas-Stärke (px)",
+        pin_backdrop_blur: "Milchglas hinter PIN-Popup",
+        pin_backdrop_blur_strength: "Milchglas-Stärke (px)",
       };
       return labels[schema.name] || schema.name;
     };
@@ -825,8 +825,8 @@ class SecuredCardEditor extends HTMLElement {
         locked_color: val.locked_color || undefined,
         accent_color: val.accent_color || undefined,
         card_opacity: val.card_opacity !== 100 ? val.card_opacity : undefined,
-        backdrop_blur: val.backdrop_blur || undefined,
-        backdrop_blur_strength: val.backdrop_blur_strength !== 10 ? val.backdrop_blur_strength : undefined,
+        pin_backdrop_blur: val.pin_backdrop_blur || undefined,
+        pin_backdrop_blur_strength: val.pin_backdrop_blur_strength !== 8 ? val.pin_backdrop_blur_strength : undefined,
       };
       this._fireChanged();
     });
@@ -1163,24 +1163,15 @@ class SecuredCard extends HTMLElement {
   _applyCardStyles(haCard) {
     const cfg = this._config;
     const opacity = cfg.card_opacity !== undefined ? cfg.card_opacity / 100 : 1;
-    // When blur is active but no explicit opacity set, default to 80% so blur is visible
-    const effectiveOpacity = cfg.backdrop_blur && opacity === 1 ? 0.8 : opacity;
-    const effectivePct = Math.round(effectiveOpacity * 100);
-    if (effectiveOpacity < 1) {
+    if (opacity < 1) {
       haCard.style.setProperty(
         "--secured-card-bg",
-        `color-mix(in srgb, var(--ha-card-background, var(--card-background-color, white)) ${effectivePct}%, transparent)`
+        `color-mix(in srgb, var(--ha-card-background, var(--card-background-color, white)) ${cfg.card_opacity}%, transparent)`
       );
     } else {
       haCard.style.removeProperty("--secured-card-bg");
     }
-    if (cfg.backdrop_blur) {
-      const strength = cfg.backdrop_blur_strength ?? 10;
-      haCard.style.setProperty("--secured-card-backdrop", `blur(${strength}px)`);
-    } else {
-      haCard.style.removeProperty("--secured-card-backdrop");
-    }
-    if (cfg.locked_color) {
+if (cfg.locked_color) {
       haCard.style.setProperty("--secured-card-locked-color", resolveColor(cfg.locked_color));
     } else {
       haCard.style.removeProperty("--secured-card-locked-color");
@@ -1246,7 +1237,13 @@ class SecuredCard extends HTMLElement {
       this._pinDialog = null;
     });
 
-    this.shadowRoot.appendChild(this._pinDialog);
+    if (this._config.pin_backdrop_blur) {
+      const strength = this._config.pin_backdrop_blur_strength ?? 8;
+      this._pinDialog.style.setProperty("--pin-backdrop-blur", `blur(${strength}px)`);
+      this._pinDialog.style.setProperty("--pin-overlay-bg", "rgba(0, 0, 0, 0.25)");
+    }
+
+    document.body.appendChild(this._pinDialog);
     this._pinDialog.open(this._config.pin);
   }
 

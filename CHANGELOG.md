@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.5] - 2026-05-16
+
+### Changed
+
+- Milchglas-Effekt (Backdrop-Blur) verschiebt sich vom Card-Hintergrund zum PIN-Dialog-Overlay: wenn `pin_backdrop_blur` aktiviert, blurt alles hinter dem Popup beim Öffnen des PIN-Dialogs
+- PIN-Dialog wird an `document.body` gehängt (statt Shadow Root) für korrekten Viewport-weiten Blur
+- `backdrop_blur` / `backdrop_blur_strength` Config-Felder umbenannt in `pin_backdrop_blur` / `pin_backdrop_blur_strength`
+
 ## [1.2.4] - 2026-05-16
 
 ### Fixed
